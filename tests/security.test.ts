@@ -1,0 +1,89 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { assertTrustedMutation, RequestSecurityError } from '../lib/security/request';
+import { getClientIp, hashRateLimitKey } from '../lib/security/rate-limit';
+import { isPrivateOrReservedIp } from '../lib/providers/audit';
+
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+}
+
+describe('request security', () => {
+  it('accepts same-origin JSON mutations', () => {
+    const request = new Request('http://localhost:3000/api/search', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+    });
+    expect(() => assertTrustedMutation(request, { requireJson: true })).not.toThrow();
+  });
+
+  it('rejects cross-site mutations', () => {
+    const request = new Request('http://localhost:3000/api/search', {
+      method: 'POST',
+      headers: { origin: 'https://attacker.example', 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' },
+    });
+    expect(() => assertTrustedMutation(request, { requireJson: true })).toThrow(RequestSecurityError);
+  });
+
+  it('extracts forwarded IPs without storing raw values in rate-limit keys', () => {
+    const request = new Request('http://localhost:3000/api/search', {
+      headers: { 'x-forwarded-for': '203.0.113.10, 10.0.0.2' },
+    });
+    expect(getClientIp(request)).toBe('203.0.113.10');
+    expect(hashRateLimitKey('ip:203.0.113.10')).toMatch(/^[a-f0-9]{64}$/);
+  });
+});
+
+describe('website audit network safety', () => {
+  it.each([
+    '127.0.0.1',
+    '10.1.2.3',
+    '172.16.0.1',
+    '192.168.1.1',
+    '169.254.169.254',
+    '100.64.0.1',
+    '192.0.2.10',
+    '198.51.100.10',
+    '203.0.113.10',
+    '::1',
+    'fc00::1',
+    'fe80::1',
+    '2001:db8::1',
+  ])('blocks private or reserved address %s', (address) => {
+    expect(isPrivateOrReservedIp(address)).toBe(true);
+  });
+
+  it('allows ordinary public addresses', () => {
+    expect(isPrivateOrReservedIp('8.8.8.8')).toBe(false);
+    expect(isPrivateOrReservedIp('2606:4700:4700::1111')).toBe(false);
+  });
+});
+
+describe('paid-wall bypass guards', () => {
+  it('meters and locks the expensive endpoints', () => {
+    const searchRoute = source('app/api/search/route.ts');
+    const auditRoute = source('app/api/audit/route.ts');
+    const generateRoute = source('app/api/generate/route.ts');
+    expect(searchRoute).toContain('consumeSearch(user)');
+    expect(searchRoute).toContain('RATE_LIMITS.search');
+    expect(searchRoute).toContain("operation: 'business-search'");
+    expect(auditRoute).toContain('consumeAudit(user)');
+    expect(auditRoute).toContain('Choose a saved business before running an analysis.');
+    expect(generateRoute).toContain('consumeMessage(user)');
+    expect(generateRoute).toContain('RATE_LIMITS.generate');
+  });
+
+  it('removes direct authenticated database writes and quota RPC access', () => {
+    const migration = source('supabase/002_launch_security.sql');
+    expect(migration).toContain('revoke insert, update, delete on public.campaigns from authenticated');
+    expect(migration).toContain('revoke insert, update, delete on public.leads from authenticated');
+    expect(migration).toContain('revoke insert, update, delete on public.messages from authenticated');
+    expect(migration).toContain('revoke all on function public.consume_usage');
+  });
+
+  it('only grants paid access for active or trialing Stripe subscriptions', () => {
+    const webhook = source('app/api/stripe/webhook/route.ts');
+    expect(webhook).toContain("['active', 'trialing'].includes(subscription.status)");
+    expect(webhook).toContain('uses an unrecognized Stripe price');
+  });
+});

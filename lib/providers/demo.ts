@@ -1,0 +1,3 @@
+export type Lead={id:string,name:string,category:string,city:string,website:string|null,reviews:number,rating:number,phone:string,status:string};
+const names=['Delta Ridge Roofing','Oakline Plumbing Co.','Riverbend Cabin Rentals','Summit Spark Electric','Red Clay Landworks','Cedar & Main Cleaning'];
+export function demoSearch(category:string,city:string):Lead[]{return names.map((name,i)=>({id:`demo-${i}`,name,category:category||['Roofing','Plumbing','Cabins'][i%3],city:city||'Hot Springs, AR',website:i===1?null:`https://example${i}.com`,reviews:[87,41,126,29,64,18][i],rating:[4.8,4.6,4.9,4.5,4.7,4.4][i],phone:`(501) 555-01${10+i}`,status:'new'}))}

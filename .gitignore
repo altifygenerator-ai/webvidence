@@ -1,0 +1,22 @@
+﻿# Dependencies
+node_modules/
+
+# Next.js generated files
+.next/
+out/
+
+# Environment files
+.env*
+!.env.example
+
+# Vercel
+.vercel/
+
+# Build and testing
+coverage/
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
