@@ -19,13 +19,13 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
     errorMessage = error?.message || '';
   } else {
-    errorMessage = 'The confirmation link is missing required information.';
+    errorMessage = 'The authentication link is missing required information.';
   }
 
   if (!errorMessage) return NextResponse.redirect(new URL(next, request.url));
 
   const loginUrl = new URL('/login', request.url);
-  loginUrl.searchParams.set('error', `Email confirmation failed: ${errorMessage}`);
+  loginUrl.searchParams.set('error', `The authentication link could not be completed: ${errorMessage}`);
   loginUrl.searchParams.set('next', next);
   return NextResponse.redirect(loginUrl);
 }

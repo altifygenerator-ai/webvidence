@@ -19,6 +19,7 @@ type Audit = {
   performanceScore: number | null;
   accessibilityScore: number | null;
   seoScore: number | null;
+  pagesCrawled?: number;
 };
 
 type Lead = {
@@ -36,6 +37,9 @@ type Lead = {
   distanceMiles: number | null;
   opportunityScore: number | null;
   audit: Audit | null;
+  auditStatus?: 'queued' | 'running' | 'completed' | 'failed' | 'limit_reached';
+  auditJobId?: string | null;
+  auditError?: string | null;
 };
 
 
@@ -63,6 +67,7 @@ type SearchResponse = {
   error?: string;
   leads?: Lead[];
   center?: { formattedAddress?: string };
+  auditJobIds?: string[];
 };
 
 export default function Campaigns() {
@@ -72,6 +77,8 @@ export default function Campaigns() {
   const [notice, setNotice] = useState('');
   const [mode, setMode] = useState<'demo' | 'live' | ''>('');
   const [auditingId, setAuditingId] = useState('');
+  const pendingLeadIds = leads.filter((lead) => lead.auditStatus === 'queued' || lead.auditStatus === 'running').map((lead) => lead.id);
+  const pendingKey = pendingLeadIds.join(',');
   const [loadingStage, setLoadingStage] = useState('Locating the market…');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaignLoading, setCampaignLoading] = useState('');
@@ -93,6 +100,45 @@ export default function Campaigns() {
       .catch(() => undefined);
     return () => { active = false; };
   }, []);
+
+
+  useEffect(() => {
+    const currentLeadIds = pendingKey.split(',').filter(Boolean);
+    if (!currentLeadIds.length) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/audit-jobs?leadIds=${encodeURIComponent(currentLeadIds.join(','))}`, { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || cancelled) return;
+        setLeads((current) => current.map((lead) => {
+          const item = data.items?.find((candidate: { leadId: string }) => candidate.leadId === lead.id);
+          if (!item) return lead;
+          if (item.audit) {
+            return {
+              ...lead,
+              audit: item.audit,
+              opportunityScore: item.audit.score,
+              auditStatus: item.status === 'failed' ? 'failed' : 'completed',
+              auditError: item.error || null,
+            };
+          }
+          return {
+            ...lead,
+            auditStatus: item.status,
+            auditError: item.error || null,
+          };
+        }));
+        const usageResponse = await fetch('/api/usage', { cache: 'no-store' });
+        if (usageResponse.ok) setUsage(await usageResponse.json());
+      } catch {
+        // Polling resumes on the next interval.
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [pendingKey]);
 
   async function refreshUsage() {
     const response = await fetch('/api/usage', { cache: 'no-store' });
@@ -130,8 +176,8 @@ export default function Campaigns() {
       'Searching Google for active businesses…',
       'Collecting websites and business details…',
       'Saving prospects to your workspace…',
-      'Checking selected websites and PageSpeed…',
-      'Building evidence scores…',
+      'Queuing selected websites for analysis…',
+      'Preparing the results…',
     ];
     let stageIndex = 0;
     const progressTimer = window.setInterval(() => {
@@ -173,11 +219,14 @@ export default function Campaigns() {
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || 'Analysis failed.');
-      setLeads((current) => current.map((lead) => (
-        lead.id === leadId
-          ? { ...lead, audit: json, opportunityScore: json.score }
-          : lead
-      )));
+      setLeads((current) => current.map((lead) => {
+        if (lead.id !== leadId) return lead;
+        if (json.status === 'completed' && json.audit) {
+          return { ...lead, audit: json.audit, opportunityScore: json.audit.score, auditStatus: 'completed', auditError: null };
+        }
+        return { ...lead, auditStatus: 'queued', auditJobId: json.jobId || null, auditError: null };
+      }));
+      setNotice(json.message || 'Analysis started in the background.');
     } catch (auditError) {
       setError(auditError instanceof Error ? auditError.message : 'Analysis failed.');
     } finally {
@@ -243,11 +292,11 @@ export default function Campaigns() {
         </label>
         <label>
           <span>Businesses</span>
-          <select className="input" name="maxResults" defaultValue="20">
+          <select className="input" name="maxResults" defaultValue="10">
             <option value="10">Up to 10</option>
-            <option value="20">Up to 20</option>
-            <option value="30">Up to 30</option>
-            <option value="40">Up to 40</option>
+            <option value="20" disabled={usage?.plan === 'free'}>Up to 20</option>
+            <option value="30" disabled={usage?.plan === 'free'}>Up to 30</option>
+            <option value="40" disabled={usage?.plan === 'free'}>Up to 40</option>
           </select>
         </label>
         <label>
@@ -268,7 +317,7 @@ export default function Campaigns() {
         Enter any U.S. city, ZIP code, or address. Google locates that point, searches within the radius you choose, and Webvidence then audits the selected business websites.
       </p>
 
-      {loading && <div className="search-progress" role="status" aria-live="polite"><span className="search-spinner"/><div><b>{loadingStage}</b><small>Large searches and website audits can take a minute. Keep this page open.</small></div></div>}
+      {loading && <div className="search-progress" role="status" aria-live="polite"><span className="search-spinner"/><div><b>{loadingStage}</b><small>The business search should finish quickly. Website analyses continue in the background.</small></div></div>}
       {error && <div className="notice notice-error"><b>Search could not finish.</b><br/>{error}<small className="error-help">Check the location spelling, Google API restrictions, plan usage, and server terminal for details.</small></div>}
       {notice && <div className="notice">{notice}</div>}
 
@@ -321,15 +370,26 @@ export default function Campaigns() {
                         <span>Performance <b>{lead.audit.performanceScore ?? '—'}</b></span>
                         <span>Accessibility <b>{lead.audit.accessibilityScore ?? '—'}</b></span>
                         <span>SEO <b>{lead.audit.seoScore ?? '—'}</b></span>
+                        <span>Pages <b>{lead.audit.pagesCrawled ?? '—'}</b></span>
                       </div>
                     </div>
                   ) : (
-                    <div className="unanalyzed-note">Not analyzed yet. The business record is real and saved to your pipeline.</div>
+                    <div className={`unanalyzed-note ${lead.auditStatus === 'failed' ? 'audit-failed-note' : ''}`}>
+                      {lead.auditStatus === 'queued' || lead.auditStatus === 'running'
+                        ? <><span className="mini-spinner" /> Website analysis is running in the background.</>
+                        : lead.auditStatus === 'failed'
+                          ? `Analysis did not finish: ${lead.auditError || 'The site could not be processed.'}`
+                          : 'Not analyzed yet. The business record is real and saved to your pipeline.'}
+                    </div>
                   )}
 
                   <div className="prospect-actions">
-                    <button className="btn primary" onClick={() => analyze(lead.id)} disabled={auditingId === lead.id}>
-                      {auditingId === lead.id ? 'Analyzing…' : lead.audit ? 'Run fresh analysis' : 'Analyze website'}
+                    <button className="btn primary" onClick={() => analyze(lead.id)} disabled={auditingId === lead.id || lead.auditStatus === 'queued' || lead.auditStatus === 'running'}>
+                      {auditingId === lead.id || lead.auditStatus === 'queued' || lead.auditStatus === 'running'
+                        ? 'Analysis running…'
+                        : lead.auditStatus === 'failed'
+                          ? 'Retry analysis'
+                          : lead.audit ? 'Run fresh analysis' : 'Analyze website'}
                     </button>
                     {lead.website && <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a>}
                     {lead.googleMapsUrl && <a className="btn" href={lead.googleMapsUrl} target="_blank" rel="noreferrer">Google listing</a>}

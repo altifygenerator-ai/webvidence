@@ -28,7 +28,26 @@ export type WebsiteAudit = {
   raw: Record<string, unknown>;
 };
 
-export async function auditWebsite(url: string | null, options?: { runPageSpeed?: boolean }) {
+type PageSnapshot = {
+  requestedUrl: string;
+  finalUrl: string;
+  httpStatus: number;
+  html: string;
+  title: string | null;
+  description: string | null;
+  textLength: number;
+  hasForm: boolean;
+  hasTel: boolean;
+  hasSchema: boolean;
+  hasContactLink: boolean;
+  links: string[];
+};
+
+const MAX_PAGES = 6;
+const MAX_PAGE_BYTES = 1_500_000;
+const PAGE_TIMEOUT_MS = 10_000;
+
+export async function auditWebsite(url: string | null, options?: { runPageSpeed?: boolean; maxPages?: number }) {
   const findings: Finding[] = [];
 
   if (!url) {
@@ -47,6 +66,7 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
       findings,
       pageSpeed: null,
       status: 'completed',
+      pages: [],
     });
   }
 
@@ -70,178 +90,251 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
       findings,
       pageSpeed: null,
       status: 'failed',
+      pages: [],
     });
   }
 
-  let html = '';
-  let finalUrl = safeUrl.toString();
-  let httpStatus: number | null = null;
-  let title: string | null = null;
-  let description: string | null = null;
+  const pageLimit = Math.max(1, Math.min(options?.maxPages || MAX_PAGES, MAX_PAGES));
+  let homepage: PageSnapshot | null = null;
   let status: WebsiteAudit['status'] = 'completed';
+  const pages: PageSnapshot[] = [];
+  const pageErrors: Array<{ url: string; message: string }> = [];
 
   try {
-    const fetched = await fetchPublicHomepage(safeUrl);
-    const response = fetched.response;
-    finalUrl = fetched.finalUrl.toString();
-    httpStatus = response.status;
-    const contentType = response.headers.get('content-type') || '';
+    homepage = await fetchPageSnapshot(safeUrl);
+    pages.push(homepage);
 
-    if (!response.ok) {
+    if (homepage.httpStatus >= 400) {
       findings.push({
         code: 'http_error',
         label: 'Website returned an error',
         severity: 'high',
-        evidence: `The homepage returned HTTP ${response.status}.`,
-        sourceUrl: finalUrl,
+        evidence: `The homepage returned HTTP ${homepage.httpStatus}.`,
+        sourceUrl: homepage.finalUrl,
       });
     }
 
-    if (!contentType.toLowerCase().includes('text/html')) {
-      findings.push({
-        code: 'not_html',
-        label: 'Homepage did not return normal HTML',
-        severity: 'high',
-        evidence: `The response content type was ${contentType || 'unknown'}.`,
-        sourceUrl: finalUrl,
-      });
+    const candidates = prioritizeInternalLinks(homepage.links, new URL(homepage.finalUrl)).slice(0, pageLimit - 1);
+    const extraPages = await mapWithConcurrency(candidates, 2, async (candidate) => {
+      try {
+        return await fetchPageSnapshot(new URL(candidate));
+      } catch (error) {
+        pageErrors.push({
+          url: candidate,
+          message: describeFetchError(error),
+        });
+        return null;
+      }
+    });
+    pages.push(...extraPages.filter((page): page is PageSnapshot => Boolean(page)));
+
+    inspectSite(pages, findings);
+    if (pageErrors.length > 0) {
       status = 'partial';
-    } else {
-      html = await readLimitedText(response, 2_000_000);
-      title = extractTitle(html);
-      description = extractMetaDescription(html);
-      inspectHtml(html, finalUrl, findings, title, description);
+      findings.push({
+        code: 'partial_crawl',
+        label: 'Some linked pages could not be checked',
+        severity: 'low',
+        evidence: `${pageErrors.length} linked page${pageErrors.length === 1 ? '' : 's'} could not be fetched during the sample crawl.`,
+        sourceUrl: homepage.finalUrl,
+        metadata: { failedPages: pageErrors },
+      });
     }
   } catch (error) {
+    const message = describeFetchError(error);
     findings.push({
       code: 'unreachable',
       label: 'Website could not be reached',
       severity: 'high',
-      evidence: error instanceof Error && error.name === 'AbortError'
-        ? 'The website did not respond within 12 seconds.'
-        : 'The website could not be fetched by the audit service.',
+      evidence: message,
       sourceUrl: safeUrl.toString(),
+      metadata: { failureType: classifyFetchFailure(error) },
     });
     status = 'failed';
   }
 
   let pageSpeed: PageSpeedScores | null = null;
+  const finalUrl = homepage?.finalUrl || safeUrl.toString();
   if (options?.runPageSpeed !== false && status !== 'failed') {
     pageSpeed = await runPageSpeed(finalUrl, process.env.PAGESPEED_API_KEY);
     addPageSpeedFindings(pageSpeed, findings, finalUrl);
-    if (pageSpeed.error) status = status === 'completed' ? 'partial' : status;
+    if (pageSpeed.error) status = 'partial';
   }
 
   return finish({
     url: safeUrl.toString(),
     finalUrl,
-    httpStatus,
-    title,
-    description,
+    httpStatus: homepage?.httpStatus ?? null,
+    title: homepage?.title ?? null,
+    description: homepage?.description ?? null,
     findings,
     pageSpeed,
     status,
+    pages,
+    pageErrors,
   });
 }
 
-function inspectHtml(
-  html: string,
-  sourceUrl: string,
-  findings: Finding[],
-  title: string | null,
-  description: string | null,
-) {
-  if (!title) {
+function inspectSite(pages: PageSnapshot[], findings: Finding[]) {
+  const homepage = pages[0];
+  inspectHomepage(homepage, findings);
+
+  const hasAnyForm = pages.some((page) => page.hasForm);
+  const hasAnyTel = pages.some((page) => page.hasTel);
+  const hasAnySchema = pages.some((page) => page.hasSchema);
+  const hasAnyContactLink = pages.some((page) => page.hasContactLink);
+  const servicePages = pages.filter((page) => isServiceLikeUrl(page.finalUrl));
+
+  if (!hasAnyForm) {
+    findings.push({
+      code: 'no_form',
+      label: 'No inquiry form detected',
+      severity: 'medium',
+      evidence: `No form element was detected across ${pages.length} checked page${pages.length === 1 ? '' : 's'}.`,
+      sourceUrl: homepage.finalUrl,
+      metadata: { pagesChecked: pages.length },
+    });
+  }
+
+  if (!hasAnyTel) {
+    findings.push({
+      code: 'phone_cta',
+      label: 'No clickable phone link detected',
+      severity: 'medium',
+      evidence: `No tel: link was detected across ${pages.length} checked page${pages.length === 1 ? '' : 's'}.`,
+      sourceUrl: homepage.finalUrl,
+      metadata: { pagesChecked: pages.length },
+    });
+  }
+
+  if (!hasAnySchema) {
+    findings.push({
+      code: 'schema',
+      label: 'No JSON-LD structured data detected',
+      severity: 'low',
+      evidence: `No application/ld+json block was detected across ${pages.length} checked page${pages.length === 1 ? '' : 's'}.`,
+      sourceUrl: homepage.finalUrl,
+      metadata: { pagesChecked: pages.length },
+    });
+  }
+
+  if (!hasAnyContactLink) {
+    findings.push({
+      code: 'weak_primary_cta',
+      label: 'No clear contact or booking path detected',
+      severity: 'medium',
+      evidence: `The sampled navigation did not reveal an obvious contact, quote, estimate, booking, or appointment path across ${pages.length} checked page${pages.length === 1 ? '' : 's'}.`,
+      sourceUrl: homepage.finalUrl,
+      metadata: { pagesChecked: pages.length },
+    });
+  }
+
+  if (pages.length >= 3 && servicePages.length === 0) {
+    findings.push({
+      code: 'service_structure',
+      label: 'No dedicated service page found in the sampled site',
+      severity: 'medium',
+      evidence: `Webvidence checked ${pages.length} pages selected from the main navigation and did not find a clearly labeled service page.`,
+      sourceUrl: homepage.finalUrl,
+      metadata: { pagesChecked: pages.length },
+    });
+  } else if (servicePages.length > 0) {
+    findings.push({
+      code: 'service_structure_positive',
+      label: 'Dedicated service content was detected',
+      severity: 'positive',
+      evidence: `${servicePages.length} sampled page${servicePages.length === 1 ? '' : 's'} appeared to be dedicated to services or offerings.`,
+      sourceUrl: servicePages[0].finalUrl,
+      metadata: { servicePages: servicePages.map((page) => page.finalUrl) },
+    });
+  }
+
+  const missingDescriptions = pages.filter((page) => !page.description);
+  if (pages.length >= 2 && missingDescriptions.length >= Math.ceil(pages.length / 2)) {
+    findings.push({
+      code: 'site_meta_descriptions',
+      label: 'Several sampled pages are missing meta descriptions',
+      severity: 'low',
+      evidence: `${missingDescriptions.length} of ${pages.length} checked pages did not include a meta description.`,
+      sourceUrl: missingDescriptions[0]?.finalUrl || homepage.finalUrl,
+      metadata: { missingPages: missingDescriptions.map((page) => page.finalUrl) },
+    });
+  }
+
+  const normalizedTitles = pages.map((page) => page.title?.trim().toLowerCase()).filter(Boolean) as string[];
+  const uniqueTitles = new Set(normalizedTitles);
+  if (normalizedTitles.length >= 3 && uniqueTitles.size < normalizedTitles.length) {
+    findings.push({
+      code: 'duplicate_titles',
+      label: 'Duplicate page titles detected',
+      severity: 'low',
+      evidence: `${normalizedTitles.length - uniqueTitles.size + 1} sampled pages appear to reuse a page title.`,
+      sourceUrl: homepage.finalUrl,
+    });
+  }
+
+  if (!findings.some((finding) => finding.severity !== 'positive')) {
+    findings.push({
+      code: 'healthy_sample',
+      label: 'No obvious problems found in the sampled pages',
+      severity: 'positive',
+      evidence: `The basic inspection of ${pages.length} page${pages.length === 1 ? '' : 's'} did not reveal an immediate technical or conversion problem.`,
+      sourceUrl: homepage.finalUrl,
+    });
+  }
+}
+
+function inspectHomepage(page: PageSnapshot, findings: Finding[]) {
+  if (!page.title) {
     findings.push({
       code: 'missing_title',
-      label: 'Missing page title',
+      label: 'Missing homepage title',
       severity: 'high',
       evidence: 'No usable <title> element was detected on the homepage.',
-      sourceUrl,
+      sourceUrl: page.finalUrl,
     });
-  } else if (title.length < 20 || title.length > 65) {
+  } else if (page.title.length < 20 || page.title.length > 65) {
     findings.push({
       code: 'weak_title',
       label: 'Homepage title may be poorly optimized',
       severity: 'low',
-      evidence: `The homepage title is ${title.length} characters long.`,
-      sourceUrl,
+      evidence: `The homepage title is ${page.title.length} characters long.`,
+      sourceUrl: page.finalUrl,
     });
   }
 
-  if (!description) {
+  if (!page.description) {
     findings.push({
       code: 'meta_description',
-      label: 'Missing meta description',
+      label: 'Missing homepage meta description',
       severity: 'medium',
       evidence: 'No meta description was detected in the homepage HTML.',
-      sourceUrl,
+      sourceUrl: page.finalUrl,
     });
   }
 
-  if (!/<meta[^>]+name=["']viewport["']/i.test(html)) {
+  if (!/<meta[^>]+name=["']viewport["']/i.test(page.html)) {
     findings.push({
       code: 'viewport',
       label: 'Mobile viewport was not detected',
       severity: 'high',
       evidence: 'The homepage does not appear to include a viewport meta tag.',
-      sourceUrl,
+      sourceUrl: page.finalUrl,
     });
   }
 
-  if (!/<form\b/i.test(html)) {
-    findings.push({
-      code: 'no_form',
-      label: 'No inquiry form detected',
-      severity: 'medium',
-      evidence: 'No form element was detected on the homepage.',
-      sourceUrl,
-    });
-  }
-
-  if (!/href\s*=\s*["']tel:/i.test(html)) {
-    findings.push({
-      code: 'phone_cta',
-      label: 'No clickable phone link detected',
-      severity: 'medium',
-      evidence: 'No tel: link was detected on the homepage.',
-      sourceUrl,
-    });
-  }
-
-  if (!/application\/ld\+json/i.test(html)) {
-    findings.push({
-      code: 'schema',
-      label: 'No JSON-LD structured data detected',
-      severity: 'low',
-      evidence: 'No application/ld+json block was detected on the homepage.',
-      sourceUrl,
-    });
-  }
-
-  if (!/href\s*=\s*["'][^"']*(contact|quote|estimate|book|appointment)/i.test(html)) {
-    findings.push({
-      code: 'weak_primary_cta',
-      label: 'No clear contact or booking link detected',
-      severity: 'medium',
-      evidence: 'The homepage HTML did not reveal an obvious contact, quote, estimate, booking, or appointment link.',
-      sourceUrl,
-    });
-  }
-
-  const text = stripHtml(html);
-  if (text.length < 700) {
+  if (page.textLength < 700) {
     findings.push({
       code: 'thin_home',
       label: 'Homepage appears thin',
       severity: 'low',
-      evidence: `Only about ${text.length} readable characters were detected on the homepage.`,
-      sourceUrl,
+      evidence: `Only about ${page.textLength} readable characters were detected on the homepage.`,
+      sourceUrl: page.finalUrl,
     });
   }
 
   const currentYear = new Date().getFullYear();
-  const copyrightYears = Array.from(html.matchAll(/(?:©|copyright)[^<]{0,50}(20\d{2})/gi))
+  const copyrightYears = Array.from(page.html.matchAll(/(?:©|copyright)[^<]{0,50}(20\d{2})/gi))
     .map((match) => Number(match[1]))
     .filter(Number.isFinite);
   const newestCopyright = copyrightYears.length ? Math.max(...copyrightYears) : null;
@@ -251,17 +344,7 @@ function inspectHtml(
       label: 'Copyright year looks outdated',
       severity: 'low',
       evidence: `The newest visible copyright year detected was ${newestCopyright}.`,
-      sourceUrl,
-    });
-  }
-
-  if (findings.length === 0) {
-    findings.push({
-      code: 'healthy_homepage',
-      label: 'No obvious homepage problems detected',
-      severity: 'positive',
-      evidence: 'The basic homepage inspection did not find an immediate technical or conversion problem.',
-      sourceUrl,
+      sourceUrl: page.finalUrl,
     });
   }
 }
@@ -312,6 +395,8 @@ function finish(input: {
   findings: Finding[];
   pageSpeed: PageSpeedScores | null;
   status: WebsiteAudit['status'];
+  pages: PageSnapshot[];
+  pageErrors?: Array<{ url: string; message: string }>;
 }): WebsiteAudit {
   const issuePoints = input.findings.reduce((total, finding) => {
     if (finding.severity === 'high') return total + 20;
@@ -330,16 +415,104 @@ function finish(input: {
     httpStatus: input.httpStatus,
     pageTitle: input.title,
     metaDescription: input.description,
-    pagesCrawled: input.url ? 1 : 0,
+    pagesCrawled: input.pages.length,
     performanceScore: input.pageSpeed?.performance ?? null,
     accessibilityScore: input.pageSpeed?.accessibility ?? null,
     seoScore: input.pageSpeed?.seo ?? null,
     bestPracticesScore: input.pageSpeed?.bestPractices ?? null,
     raw: {
+      pages: input.pages.map((page) => ({
+        requestedUrl: page.requestedUrl,
+        finalUrl: page.finalUrl,
+        httpStatus: page.httpStatus,
+        title: page.title,
+        metaDescription: page.description,
+        textLength: page.textLength,
+      })),
+      pageErrors: input.pageErrors || [],
+      crawlLimit: MAX_PAGES,
       pagespeed: input.pageSpeed?.raw ?? null,
       pagespeedError: input.pageSpeed?.error ?? null,
     },
   };
+}
+
+async function fetchPageSnapshot(initialUrl: URL): Promise<PageSnapshot> {
+  const fetched = await fetchPublicPage(initialUrl);
+  const response = fetched.response;
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('text/html')) {
+    throw new Error(`The page returned ${contentType || 'an unknown content type'} instead of HTML.`);
+  }
+  const html = await readLimitedText(response, MAX_PAGE_BYTES);
+  const finalUrl = fetched.finalUrl.toString();
+  return {
+    requestedUrl: initialUrl.toString(),
+    finalUrl,
+    httpStatus: response.status,
+    html,
+    title: extractTitle(html),
+    description: extractMetaDescription(html),
+    textLength: stripHtml(html).length,
+    hasForm: /<form\b/i.test(html),
+    hasTel: /href\s*=\s*["']tel:/i.test(html),
+    hasSchema: /application\/ld\+json/i.test(html),
+    hasContactLink: /href\s*=\s*["'][^"']*(contact|quote|estimate|book|appointment|schedule)/i.test(html),
+    links: extractInternalLinks(html, new URL(finalUrl)),
+  };
+}
+
+function extractInternalLinks(html: string, base: URL) {
+  const links = new Set<string>();
+  const matches = html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>/gi);
+  for (const match of matches) {
+    try {
+      const link = new URL(decodeEntities(match[1]), base);
+      if (!['http:', 'https:'].includes(link.protocol)) continue;
+      if (!sameSite(link.hostname, base.hostname)) continue;
+      if (link.username || link.password || link.port) continue;
+      if (/\.(?:pdf|jpg|jpeg|png|gif|webp|svg|zip|docx?|xlsx?|mp4|mp3)$/i.test(link.pathname)) continue;
+      link.hash = '';
+      link.search = '';
+      const normalized = link.toString().replace(/\/$/, '') || link.origin;
+      if (normalized === base.toString().replace(/\/$/, '')) continue;
+      links.add(normalized);
+    } catch {
+      // Ignore malformed navigation links.
+    }
+  }
+  return Array.from(links);
+}
+
+function prioritizeInternalLinks(links: string[], homepage: URL) {
+  const excluded = /\/(privacy|terms|login|sign-?in|cart|checkout|wp-admin|feed|tag|author|category)(\/|$)/i;
+  return [...links]
+    .filter((link) => !excluded.test(new URL(link).pathname))
+    .sort((a, b) => linkPriority(b, homepage) - linkPriority(a, homepage));
+}
+
+function linkPriority(value: string, homepage: URL) {
+  const url = new URL(value);
+  const path = url.pathname.toLowerCase();
+  let score = 0;
+  if (/(service|services|what-we-do|solutions|offerings)/.test(path)) score += 100;
+  if (/(contact|quote|estimate|book|appointment|schedule)/.test(path)) score += 85;
+  if (/(location|service-area|areas-we-serve)/.test(path)) score += 75;
+  if (/(about|team|company)/.test(path)) score += 45;
+  if (/(gallery|portfolio|projects|work)/.test(path)) score += 35;
+  if (url.origin === homepage.origin) score += 10;
+  score -= Math.min(path.split('/').filter(Boolean).length * 2, 12);
+  return score;
+}
+
+function isServiceLikeUrl(value: string) {
+  const path = new URL(value).pathname.toLowerCase();
+  return /\/(service|services|what-we-do|solutions|offerings|repairs?|installation|cleaning|roofing|plumbing|landscaping)(\/|$|-)/i.test(path);
+}
+
+function sameSite(a: string, b: string) {
+  const normalize = (host: string) => host.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+  return normalize(a) === normalize(b);
 }
 
 function extractTitle(html: string) {
@@ -399,7 +572,7 @@ export async function validatePublicUrl(value: string) {
   return url;
 }
 
-async function fetchPublicHomepage(initialUrl: URL) {
+async function fetchPublicPage(initialUrl: URL) {
   let current = initialUrl;
   const visited = new Set<string>();
 
@@ -409,7 +582,7 @@ async function fetchPublicHomepage(initialUrl: URL) {
     visited.add(current.toString());
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
     let response: Response;
     try {
       response = await fetch(current, {
@@ -417,7 +590,7 @@ async function fetchPublicHomepage(initialUrl: URL) {
         redirect: 'manual',
         cache: 'no-store',
         headers: {
-          'user-agent': 'Mozilla/5.0 (compatible; WebvidenceAudit/1.0; +https://webvidence.app)',
+          'user-agent': 'Mozilla/5.0 (compatible; WebvidenceAudit/1.1; +https://webvidence.app)',
           accept: 'text/html,application/xhtml+xml',
         },
       });
@@ -440,7 +613,7 @@ async function fetchPublicHomepage(initialUrl: URL) {
 async function readLimitedText(response: Response, maxBytes: number) {
   const declared = Number(response.headers.get('content-length') || 0);
   if (Number.isFinite(declared) && declared > maxBytes) {
-    throw new Error('The homepage response was too large to inspect safely.');
+    throw new Error('The page response was too large to inspect safely.');
   }
 
   if (!response.body) return '';
@@ -453,7 +626,7 @@ async function readLimitedText(response: Response, maxBytes: number) {
       if (done) break;
       if (!value) continue;
       total += value.byteLength;
-      if (total > maxBytes) throw new Error('The homepage response was too large to inspect safely.');
+      if (total > maxBytes) throw new Error('The page response was too large to inspect safely.');
       chunks.push(value);
     }
   } finally {
@@ -467,6 +640,29 @@ async function readLimitedText(response: Response, maxBytes: number) {
     offset += chunk.byteLength;
   }
   return new TextDecoder('utf-8', { fatal: false }).decode(combined);
+}
+
+function describeFetchError(error: unknown) {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') return 'The website did not respond before the 10-second safety timeout.';
+    if (/ENOTFOUND|getaddrinfo|name.*resolved/i.test(error.message)) return 'The website domain could not be resolved.';
+    if (/certificate|SSL|TLS/i.test(error.message)) return 'The website could not establish a secure connection.';
+    if (/too large/i.test(error.message)) return error.message;
+    if (/redirect/i.test(error.message)) return error.message;
+    if (/content type|instead of HTML/i.test(error.message)) return error.message;
+  }
+  return 'The website could not be fetched by the audit service. It may be offline, blocking automated checks, or temporarily unavailable.';
+}
+
+function classifyFetchFailure(error: unknown) {
+  if (!(error instanceof Error)) return 'unknown';
+  if (error.name === 'AbortError') return 'timeout';
+  if (/ENOTFOUND|getaddrinfo|resolved/i.test(error.message)) return 'dns';
+  if (/certificate|SSL|TLS/i.test(error.message)) return 'tls';
+  if (/redirect/i.test(error.message)) return 'redirect';
+  if (/too large/i.test(error.message)) return 'oversized';
+  if (/content type|instead of HTML/i.test(error.message)) return 'non_html';
+  return 'fetch';
 }
 
 function isBlockedHostname(hostname: string) {
@@ -519,4 +715,19 @@ export function isPrivateOrReservedIp(address: string) {
     (a === 203 && b === 0 && c === 113) ||
     a >= 224
   );
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= items.length) return;
+      results[current] = await mapper(items[current]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
 }

@@ -22,6 +22,8 @@ export type OutreachInput = {
 export type GeneratedOutreach = {
   subject: string | null;
   body: string;
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+  requestId?: string | null;
 };
 
 export async function generateMessage(input: OutreachInput): Promise<GeneratedOutreach> {
@@ -63,12 +65,21 @@ export async function generateMessage(input: OutreachInput): Promise<GeneratedOu
   const text = response.output_text.trim();
   if (!text) return fallbackMessage(input, fact, place);
 
-  if (input.channel !== 'email') return { subject: null, body: text.replace(/^BODY:\s*/i, '').trim() };
+  const usage = response.usage ? {
+    inputTokens: response.usage.input_tokens || 0,
+    outputTokens: response.usage.output_tokens || 0,
+    totalTokens: response.usage.total_tokens || 0,
+  } : undefined;
+  const requestId = response._request_id || null;
+
+  if (input.channel !== 'email') return { subject: null, body: text.replace(/^BODY:\s*/i, '').trim(), usage, requestId };
   const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
   const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
   return {
     subject: subjectMatch?.[1]?.trim().slice(0, 120) || `Quick question about ${input.name}`,
     body: bodyMatch?.[1]?.trim() || text.replace(/SUBJECT:.*\n?/i, '').replace(/^BODY:\s*/i, '').trim(),
+    usage,
+    requestId,
   };
 }
 

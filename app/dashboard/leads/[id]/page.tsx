@@ -29,6 +29,14 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
     ? await supabase.from('audit_findings').select('id,code,label,severity,evidence,source_url').eq('audit_id', audit.id)
     : { data: [] };
 
+  const { data: auditJob } = await supabase
+    .from('audit_jobs')
+    .select('id,status,result_status,error_message,attempts,updated_at')
+    .eq('lead_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const { data: messages } = await supabase
     .from('messages')
     .select('id,channel,subject,body,status,created_at')
@@ -62,8 +70,8 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
 
       <section className="evidence-file-section">
         <div className="panel-heading">
-          <div><div className="eyebrow">Verified site evidence</div><h3>{audit ? `${findings?.length || 0} findings from latest analysis` : 'No website analysis yet'}</h3></div>
-          {audit ? <span className="tag">{audit.status}</span> : null}
+          <div><div className="eyebrow">Verified site evidence</div><h3>{audit ? `${findings?.length || 0} findings from ${audit.pages_crawled} checked page${audit.pages_crawled === 1 ? '' : 's'}` : auditJob?.status === 'queued' || auditJob?.status === 'running' ? 'Website analysis is running' : 'No website analysis yet'}</h3></div>
+          {audit ? <span className="tag">{audit.status}</span> : auditJob ? <span className="tag">{auditJob.status}</span> : null}
         </div>
         {audit ? (
           <>
@@ -81,7 +89,7 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
               ))}
             </div>
           </>
-        ) : <div className="notice">Run an analysis from the prospect search screen before generating evidence-backed outreach.</div>}
+        ) : <div className={`notice ${auditJob?.status === 'failed' ? 'notice-error' : ''}`}>{auditJob?.status === 'queued' || auditJob?.status === 'running' ? 'Analysis is running in the background. You can leave this page and return later.' : auditJob?.status === 'failed' ? `The analysis worker could not finish after ${auditJob.attempts || 1} attempt${auditJob.attempts === 1 ? '' : 's'}: ${auditJob.error_message || 'Unknown processing error.'}` : 'Run an analysis from the prospect search screen before generating evidence-backed outreach.'}</div>}
       </section>
 
       <OutreachComposer

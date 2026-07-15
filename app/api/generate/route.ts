@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { assertTrustedMutation, RequestSecurityError } from '@/lib/security/request';
 import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/rate-limit';
 import { acquireOperationLock, releaseOperationLock, type OperationLock } from '@/lib/security/operation-lock';
+import { logApiUsage } from '@/lib/data/api-usage';
 
 const schema = z.object({
   leadId: z.string().uuid(),
@@ -123,13 +124,21 @@ export async function POST(req: Request) {
     }).select('id,channel,subject,body,status,created_at').single();
     if (saveError) throw new Error(`Message could not be saved: ${saveError.message}`);
 
-    await db.from('api_usage_log').insert({
-      workspace_id: user.workspaceId,
-      user_id: user.id,
+    await logApiUsage({
+      workspaceId: user.workspaceId,
+      userId: user.id,
       provider: process.env.OPENAI_API_KEY ? 'openai' : 'local_fallback',
       operation: 'outreach_generation',
       units: 1,
-      metadata: { leadId: lead.id, channel: input.channel },
+      requestId: generated.requestId || null,
+      metadata: {
+        leadId: lead.id,
+        channel: input.channel,
+        model: process.env.OPENAI_MODEL || 'gpt-5-mini',
+        inputTokens: generated.usage?.inputTokens || 0,
+        outputTokens: generated.usage?.outputTokens || 0,
+        totalTokens: generated.usage?.totalTokens || 0,
+      },
     });
 
     return NextResponse.json({ message: saved });

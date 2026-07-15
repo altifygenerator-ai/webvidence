@@ -12,6 +12,18 @@ describe('plans', () => {
     expect(PLANS.starter.messages).toBeGreaterThan(PLANS.free.messages);
     expect(PLANS.freelancer.messages).toBeGreaterThan(PLANS.starter.messages);
     expect(PLANS.studio.messages).toBeGreaterThan(PLANS.freelancer.messages);
+    expect(PLANS.starter.campaigns).toBeGreaterThanOrEqual(PLANS.free.campaigns);
+    expect(PLANS.freelancer.campaigns).toBeGreaterThan(PLANS.starter.campaigns);
+    expect(PLANS.studio.campaigns).toBeGreaterThan(PLANS.freelancer.campaigns);
+    expect(PLANS.starter.saved).toBeGreaterThan(PLANS.free.saved);
+    expect(PLANS.freelancer.saved).toBeGreaterThan(PLANS.starter.saved);
+    expect(PLANS.studio.saved).toBeGreaterThan(PLANS.freelancer.saved);
+  });
+
+
+  it('gives free users enough campaign and lead capacity to use every included search', () => {
+    expect(PLANS.free.campaigns).toBeGreaterThanOrEqual(PLANS.free.searches);
+    expect(PLANS.free.saved).toBeGreaterThanOrEqual(PLANS.free.searches * 10);
   });
 
   it('orders customer plans correctly', () => {

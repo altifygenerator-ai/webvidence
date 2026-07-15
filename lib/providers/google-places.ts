@@ -99,6 +99,8 @@ export function distanceMiles(a: Coordinates, b: Coordinates) {
 export async function geocodeLocation(location: string, apiKey: string) {
   const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
   url.searchParams.set('address', location);
+  url.searchParams.set('components', 'country:US');
+  url.searchParams.set('region', 'us');
   url.searchParams.set('key', apiKey);
 
   const response = await fetchWithTimeout(url, { method: 'GET' }, 12_000);

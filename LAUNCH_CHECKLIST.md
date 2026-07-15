@@ -1,53 +1,99 @@
 # Webvidence launch checklist
 
-## Accounts and security
-- [ ] Verify signup, confirmation email, login, homepage signed-in state, and logout
-- [ ] Verify RLS with two unrelated test accounts
-- [ ] Confirm the configured owner is the only admin
-- [ ] Confirm one account cannot fetch or edit another account's lead or message IDs
-- [ ] Run `supabase/002_launch_security.sql` on the existing production Supabase project
-- [ ] Test free-plan search exhaustion and verify a failed search refunds its credit
-- [ ] Test free-plan analysis exhaustion
-- [ ] Test free-plan outreach-generation exhaustion
-- [ ] Confirm server secret keys never appear in browser requests or Git history
-- [ ] Confirm authenticated clients cannot directly insert/update campaigns, leads, messages, or usage counters through Supabase REST
-- [ ] Confirm a second simultaneous search returns 409 and does not consume another Google request
-- [ ] Confirm cross-site mutation requests return 403 and burst requests return 429
+## Database
 
-## Search and audits
-- [ ] Test at least five trades in five different states
-- [ ] Verify 25, 50, 75, and 100-mile results
-- [ ] Review duplicate, closed, service-area, no-website, and unreachable-site cases
-- [ ] Compare at least 50 evidence scores against a human review
-- [ ] Confirm search errors and long searches show useful status messages
-- [ ] Set Google Cloud quotas, billing alerts, and API restrictions
-- [ ] Review Google Maps Platform storage and display requirements before public launch
+- [ ] Existing live project ran `003_secret_key_rpc_fix.sql` if not already applied
+- [ ] Existing live project ran `004_functionality_upgrade.sql`
+- [ ] `audit_jobs` shows `available_at`, `usage_reserved`, `credit_refunded`, and `result_status`
+- [ ] Existing users, subscriptions, leads, and messages are still present
 
-## Outreach
-- [ ] Configure a real outreach profile in Settings
-- [ ] Test Facebook, email, text, and follow-up drafts
-- [ ] Confirm drafts only use saved audit findings
-- [ ] Confirm editing, copy, mark-sent, notes, status, and follow-up dates persist
-- [ ] Confirm no outreach is automatically sent
-- [ ] Add reviewed acceptable-use language and do-not-contact procedures
+## Environment
 
-## Stripe
-- [ ] Test Starter, Freelancer, and Studio checkout
-- [ ] Test Starter to Freelancer and Freelancer to Studio upgrades
-- [ ] Verify Studio shows maximum-plan state
-- [ ] Verify Customer Portal, cancellation, payment-method updates, and invoices
-- [ ] Replay duplicate webhooks and verify only one request processes while concurrent duplicates retry
-- [ ] Test active and trialing grant paid access; canceled, past-due, unpaid, incomplete, and failed-payment states fall back to Free
-- [ ] Verify live webhook endpoint after deployment
+- [ ] `NEXT_PUBLIC_APP_URL` uses the production domain
+- [ ] `NEXT_PUBLIC_SUPPORT_EMAIL` points to a monitored inbox
+- [ ] Supabase URL, publishable key, and secret key are configured
+- [ ] Google Places, Geocoding, and PageSpeed keys are configured and restricted
+- [ ] OpenAI key and model are configured
+- [ ] Stripe live key, webhook secret, and live Price IDs are configured
+- [ ] `DEMO_MODE=false`
+- [ ] `BILLING_ENABLED=true`
+- [ ] Strong unique `RATE_LIMIT_SALT` is configured
+- [ ] Strong unique `CRON_SECRET` is configured
+- [ ] API cost-rate environment values reflect the current provider pricing you want reported
 
-## Production operations
-- [ ] Configure production SMTP and auth redirect URLs
-- [ ] Confirm Postgres-backed user/IP rate limiting is active in production
-- [ ] Add error monitoring and alerting
-- [ ] Add a background job queue before large public audit batches
-- [ ] Configure Supabase backups and recovery checks
-- [ ] Replace starter Privacy and Terms pages with reviewed documents
-- [ ] Verify analytics and conversion events
-- [ ] Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm audit --omit=dev`
-- [ ] Keep `DEMO_MODE=false` and confirm LIVE DATA before launch
-- [ ] Keep `BILLING_ENABLED=true` only after production Stripe verification
+## Authentication
+
+- [ ] Signup confirmation reaches the inbox
+- [ ] Resend confirmation works
+- [ ] Forgot password sends a reset link
+- [ ] Reset link opens `/reset-password`
+- [ ] New password works and old password no longer works
+- [ ] Login, logout, and selected-plan return paths work
+
+## Free plan
+
+- [ ] Fresh free user can run 5 searches
+- [ ] Each free search returns no more than 10 businesses
+- [ ] User can create up to 5 active campaigns
+- [ ] User can keep up to 50 non-archived leads
+- [ ] Sixth monthly search is blocked server-side
+- [ ] User gets 10 charged website analyses
+- [ ] No-website findings do not consume an analysis credit
+- [ ] Free user cannot export CSV or access paid limits
+
+## Website analysis
+
+- [ ] Homepage and up to 5 important internal pages are sampled
+- [ ] `pages_crawled` is accurate in Supabase and lead files
+- [ ] PageSpeed runs once per website audit
+- [ ] Unreachable websites save a clear failed audit finding
+- [ ] Partial crawls identify failed internal pages without discarding the successful findings
+- [ ] Internal/private URLs, unsafe ports, redirects, and oversized responses remain blocked
+
+## Background jobs
+
+- [ ] Search returns before the entire audit batch finishes
+- [ ] Queued/running state is visible in the search results
+- [ ] Leaving and returning does not lose queued work
+- [ ] Dashboard polling picks up completed audits
+- [ ] `/api/cron/audits` returns 401 without the correct secret
+- [ ] Vercel Cron appears in the project dashboard after deployment
+- [ ] A deliberately failed worker retries and refunds the audit credit after the final internal failure
+
+## Leads and outreach
+
+- [ ] Bulk archive works
+- [ ] Archived view works
+- [ ] Bulk restore works
+- [ ] Only archived leads can be permanently deleted
+- [ ] Do-not-contact blocks outreach generation
+- [ ] Facebook, email, text, and follow-up drafts save correctly
+- [ ] Sent status updates the lead and message history
+
+## Billing
+
+- [ ] Signed-out pricing selection goes through signup/login
+- [ ] Signed-in free account opens Checkout
+- [ ] Existing paid user upgrades without a duplicate subscription
+- [ ] Studio displays maximum-plan state
+- [ ] Customer Portal works
+- [ ] Webhook updates profile and subscription tables
+- [ ] Canceled, unpaid, and incomplete subscriptions fall back to Free
+
+## Reporting and legal
+
+- [ ] Google Geocoding and Places usage logs include estimated costs
+- [ ] PageSpeed usage is logged
+- [ ] OpenAI logs include token counts and configured estimated costs
+- [ ] Admin provider breakdown displays expected totals
+- [ ] Terms and Privacy links are accessible
+- [ ] Support email is correct
+- [ ] Terms and Privacy have been reviewed for the operator's business and jurisdiction
+
+## Build
+
+- [ ] `npm run lint`
+- [ ] `npm run typecheck`
+- [ ] `npm test`
+- [ ] `npm run build`
+- [ ] `npm audit --omit=dev`

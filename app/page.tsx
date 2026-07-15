@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {MarketingHeader} from '@/components/marketing-header';
 import {getViewer} from '@/lib/security/auth';
 import {PLANS} from '@/lib/plans';
+import {MarketingFooter} from '@/components/marketing-footer';
 
 const findings=[
   ['Conversion path','No inquiry form detected','High'],
@@ -42,7 +43,7 @@ export default async function Home(){const viewer=await getViewer();return <>
           <div className="recommended-angle"><small>RECOMMENDED ANGLE</small><p>Mobile-first rebuild with dedicated service-area pages and a clearer quote path.</p></div>
           <div className="sheet-mark">EVIDENCE VERIFIED</div>
         </article>
-        <div className="evidence-shadow-card"><span>Website checked</span><b>12 pages scanned</b><small>Metadata · contact paths · page structure</small></div>
+        <div className="evidence-shadow-card"><span>Website checked</span><b>Up to 6 pages sampled</b><small>Metadata · contact paths · service structure · PageSpeed</small></div>
       </div>
     </section>
 
@@ -58,7 +59,7 @@ export default async function Home(){const viewer=await getViewer();return <>
       </div>
       <div className="workflow-board">
         <article className="workflow-step offset-one"><span>01</span><div><small>SEARCH THE MARKET</small><h3>Choose a trade and radius.</h3><p>Search local businesses by category, city, distance, review count, and website condition.</p></div></article>
-        <article className="workflow-step"><span>02</span><div><small>REVIEW THE PROOF</small><h3>Inspect what is actually there.</h3><p>See real findings around contact paths, mobile usability, metadata, service structure, and technical trust.</p></div></article>
+        <article className="workflow-step"><span>02</span><div><small>REVIEW THE PROOF</small><h3>Inspect what is actually there.</h3><p>See real findings from the homepage and a small sample of important internal pages, plus mobile PageSpeed checks.</p></div></article>
         <article className="workflow-step offset-two"><span>03</span><div><small>WORK THE LEAD</small><h3>Start with one true observation.</h3><p>Generate a grounded opener, save the prospect, and keep the next follow-up in one place.</p></div></article>
       </div>
     </section>
@@ -76,4 +77,5 @@ export default async function Home(){const viewer=await getViewer();return <>
       <Link className="action primary large" href={viewer?"/dashboard/campaigns":"/signup"}><span>{viewer?"Search your next market":"Find the first ten"}</span><b>↗</b></Link>
     </section>
   </main>
+  <MarketingFooter/>
 </>}

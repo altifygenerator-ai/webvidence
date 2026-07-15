@@ -64,11 +64,15 @@ describe('paid-wall bypass guards', () => {
     const searchRoute = source('app/api/search/route.ts');
     const auditRoute = source('app/api/audit/route.ts');
     const generateRoute = source('app/api/generate/route.ts');
+    const auditQueue = source('lib/jobs/audits.ts');
     expect(searchRoute).toContain('consumeSearch(user)');
     expect(searchRoute).toContain('RATE_LIMITS.search');
     expect(searchRoute).toContain("operation: 'business-search'");
-    expect(auditRoute).toContain('consumeAudit(user)');
-    expect(auditRoute).toContain('Choose a saved business before running an analysis.');
+    expect(auditRoute).toContain('queueLeadAudits');
+    expect(auditQueue).toContain('await consumeAudit(user)');
+    expect(auditQueue).toContain("status: 'queued'");
+    expect(auditQueue).toContain('A stale third attempt is closed');
+    expect(auditQueue).toContain("credit_refunded: true");
     expect(generateRoute).toContain('consumeMessage(user)');
     expect(generateRoute).toContain('RATE_LIMITS.generate');
   });
@@ -85,5 +89,46 @@ describe('paid-wall bypass guards', () => {
     const webhook = source('app/api/stripe/webhook/route.ts');
     expect(webhook).toContain("['active', 'trialing'].includes(subscription.status)");
     expect(webhook).toContain('uses an unrecognized Stripe price');
+  });
+});
+
+
+describe('launch functionality guards', () => {
+  it('keeps free searches usable and caps each free result set server-side', () => {
+    const searchRoute = source('app/api/search/route.ts');
+    expect(searchRoute).toContain("user.plan === 'free'");
+    expect(searchRoute).toContain('Math.min(input.maxResults, 10)');
+    expect(searchRoute).toContain('Free searches return up to 10 businesses');
+  });
+
+  it('does not charge an analysis credit when Google has no website URL', () => {
+    const queue = source('lib/jobs/audits.ts');
+    const noWebsiteBranch = queue.indexOf('if (!lead.website)');
+    const consumption = queue.indexOf('await consumeAudit(user)');
+    expect(noWebsiteBranch).toBeGreaterThan(-1);
+    expect(consumption).toBeGreaterThan(noWebsiteBranch);
+  });
+
+  it('uses a multi-page crawl and a recoverable database audit queue', () => {
+    const audit = source('lib/providers/audit.ts');
+    const queue = source('lib/jobs/audits.ts');
+    const migration = source('supabase/004_functionality_upgrade.sql');
+    expect(audit).toContain('const MAX_PAGES = 6');
+    expect(audit).toContain('prioritizeInternalLinks');
+    expect(queue).toContain('processQueuedAuditJobs');
+    expect(queue).toContain('credit_refunded: true');
+    expect(migration).toContain('audit_jobs_one_open_per_lead_uidx');
+  });
+
+  it('includes password recovery and confirmation resend flows', () => {
+    expect(source('app/forgot-password/page.tsx')).toContain('resetPasswordForEmail');
+    expect(source('app/reset-password/page.tsx')).toContain('updateUser({ password })');
+    expect(source('app/resend-confirmation/page.tsx')).toContain("type: 'signup'");
+  });
+
+  it('limits permanent bulk deletion to archived leads in the same workspace', () => {
+    const bulk = source('app/api/leads/bulk/route.ts');
+    expect(bulk).toContain("lead.status === 'archived'");
+    expect(bulk).toContain(".eq('workspace_id', user.workspaceId)");
   });
 });

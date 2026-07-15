@@ -1,17 +1,17 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getViewer } from '@/lib/security/auth';
-import { consumeAudit, consumeSearch, refundUsage } from '@/lib/security/entitlements';
+import { consumeSearch, refundUsage } from '@/lib/security/entitlements';
 import { demoSearch } from '@/lib/providers/demo';
-import { auditWebsite } from '@/lib/providers/audit';
 import { geocodeLocation, searchBusinesses, type GoogleBusiness } from '@/lib/providers/google-places';
-import { saveLeadAudit } from '@/lib/data/audits';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { flags } from '@/lib/env';
 import { PLANS } from '@/lib/plans';
 import { assertTrustedMutation, RequestSecurityError } from '@/lib/security/request';
 import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/rate-limit';
 import { acquireOperationLock, releaseOperationLock, type OperationLock } from '@/lib/security/operation-lock';
+import { queueLeadAudits, processAuditJobs } from '@/lib/jobs/audits';
+import { logApiUsage } from '@/lib/data/api-usage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -31,7 +31,9 @@ type SavedLead = {
   googleMapsUrl: string | null;
   distanceMiles: number | null;
   opportunityScore: number | null;
-  audit: Awaited<ReturnType<typeof saveLeadAudit>> | null;
+  audit: null | Record<string, unknown>;
+  auditStatus?: 'queued' | 'running' | 'completed' | 'failed' | 'limit_reached' | 'already_queued';
+  auditJobId?: string | null;
 };
 
 const schema = z.object({
@@ -76,21 +78,19 @@ export async function POST(req: Request) {
       return NextResponse.json({
         leads: demoSearch(input.category, input.location),
         mode: 'demo',
-        warning: 'DEMO_MODE is true. Set DEMO_MODE=false in .env.local and restart the server to use Google Places.',
+        warning: 'DEMO_MODE is true. Set DEMO_MODE=false and restart the server to use Google Places.',
       });
     }
 
     const placesKey = process.env.GOOGLE_PLACES_API_KEY;
     const geocodingKey = process.env.GOOGLE_GEOCODING_API_KEY || placesKey;
     if (!placesKey || !geocodingKey) {
-      throw new SearchHttpError('Google API key is missing. Add the Google API values to .env.local.', 500);
+      throw new SearchHttpError('Google API key is missing. Add the Google API values to the server environment.', 500);
     }
     if (!user.workspaceId) {
       throw new SearchHttpError('Your account does not have a workspace. Run the Supabase setup and sign in again.', 500);
     }
 
-    // Reserve the monthly search allowance before any billable Google request.
-    // Any failed search is refunded in the catch block.
     await consumeSearch(user);
     searchCharged = true;
 
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
           .in('status', ['draft', 'active', 'paused']);
         if ((campaignCount || 0) >= PLANS[user.plan].campaigns) {
           throw new SearchHttpError(
-            `Your ${PLANS[user.plan].name} plan allows ${PLANS[user.plan].campaigns} active campaign${PLANS[user.plan].campaigns === 1 ? '' : 's'}. Archive an existing campaign or upgrade to search a new market.`,
+            `Your ${PLANS[user.plan].name} plan allows ${PLANS[user.plan].campaigns} active campaigns. Archive an existing campaign or upgrade to search a new market.`,
             402,
           );
         }
@@ -145,7 +145,13 @@ export async function POST(req: Request) {
 
     if (!campaign) throw new Error('Campaign could not be resolved.');
 
-    let effectiveMaxResults = input.maxResults;
+    let effectiveMaxResults = user.plan === 'free' && !user.isAdmin
+      ? Math.min(input.maxResults, 10)
+      : input.maxResults;
+    let resultCapNotice = user.plan === 'free' && input.maxResults > 10
+      ? 'Free searches return up to 10 businesses so all five monthly searches remain usable.'
+      : '';
+
     if (!user.isAdmin) {
       const { count: savedLeadCount } = await db
         .from('leads')
@@ -155,11 +161,14 @@ export async function POST(req: Request) {
       const remaining = Math.max(0, PLANS[user.plan].saved - (savedLeadCount || 0));
       if (remaining === 0) {
         throw new SearchHttpError(
-          `Your ${PLANS[user.plan].name} plan has reached its ${PLANS[user.plan].saved}-lead storage limit. Upgrade or archive leads before saving more.`,
+          `Your ${PLANS[user.plan].name} plan has reached its ${PLANS[user.plan].saved}-lead storage limit. Archive leads or upgrade before saving more.`,
           402,
         );
       }
-      effectiveMaxResults = Math.min(input.maxResults, remaining);
+      if (effectiveMaxResults > remaining) {
+        effectiveMaxResults = remaining;
+        resultCapNotice = `Only ${remaining} open lead slot${remaining === 1 ? '' : 's'} remained, so this search was capped.`;
+      }
     }
 
     const { data: searchRun, error: runError } = await db
@@ -198,60 +207,39 @@ export async function POST(req: Request) {
       });
 
       const requestedAuditCount = Math.min(input.auditCount, savedLeads.length);
-      const auditedLeads = [...savedLeads];
-      const auditWarnings: string[] = [];
-
+      const auditTargets = prioritizeForAudit(savedLeads).slice(0, requestedAuditCount);
+      let auditQueueError = '';
+      let queued: Awaited<ReturnType<typeof queueLeadAudits>> = { results: [], jobIds: [], limitReached: false };
       if (requestedAuditCount > 0) {
-        const auditTargets = prioritizeForAudit(savedLeads).slice(0, requestedAuditCount);
-        const auditMap = new Map<string, Awaited<ReturnType<typeof saveLeadAudit>>>();
-
-        for (const lead of auditTargets) {
-          let auditLock: OperationLock | null = null;
-          let auditCharged = false;
-          try {
-            auditLock = await acquireOperationLock({
-              userId: user.id,
-              operation: `audit:${lead.id}`,
-              ttlSeconds: 180,
-            });
-            if (!auditLock) {
-              auditWarnings.push(`${lead.name} was already being analyzed.`);
-              continue;
-            }
-
-            await consumeAudit(user);
-            auditCharged = true;
-            const audit = await auditWebsite(lead.website, { runPageSpeed: true });
-            const saved = await saveLeadAudit({
-              workspaceId: user.workspaceId,
-              userId: user.id,
-              leadId: lead.id,
-              audit,
-              reviews: lead.reviews,
-            });
-            auditMap.set(lead.id, saved);
-          } catch (error) {
-            if (auditCharged) await refundUsage(user, 'audit');
-            if (error instanceof Error && error.message === 'PLAN_LIMIT_REACHED') {
-              auditWarnings.push('Your monthly analysis limit was reached. Remaining businesses were saved without analysis.');
-              break;
-            }
-            auditWarnings.push(`${lead.name} could not be analyzed right now.`);
-          } finally {
-            await releaseOperationLock(auditLock);
-          }
+        try {
+          queued = await queueLeadAudits({
+            id: user.id,
+            workspaceId: user.workspaceId,
+            plan: user.plan,
+            isAdmin: user.isAdmin,
+          }, auditTargets);
+        } catch (error) {
+          auditQueueError = error instanceof Error ? error.message : 'Selected website analyses could not be queued.';
+          console.error('Business search completed but audit queueing failed:', error);
         }
+      }
 
-        for (let index = 0; index < auditedLeads.length; index += 1) {
-          const audit = auditMap.get(auditedLeads[index].id);
-          if (audit) {
-            auditedLeads[index] = {
-              ...auditedLeads[index],
-              opportunityScore: audit.score,
-              audit,
-            };
-          }
-        }
+      const auditByLead = new Map(queued.results.map((item) => [item.leadId, item]));
+      const leads = savedLeads.map((lead) => {
+        const job = auditByLead.get(lead.id);
+        return job ? {
+          ...lead,
+          audit: job.audit || null,
+          opportunityScore: job.audit?.score ?? lead.opportunityScore,
+          auditStatus: job.status === 'already_queued' ? 'queued' : job.status,
+          auditJobId: job.jobId,
+        } : lead;
+      });
+
+      if (queued.jobIds.length) {
+        after(async () => {
+          await processAuditJobs(queued.jobIds, 2);
+        });
       }
 
       await db.from('search_runs').update({
@@ -259,27 +247,35 @@ export async function POST(req: Request) {
         result_count: savedLeads.length,
         billable_requests: googleResult.requests + 1,
         completed_at: new Date().toISOString(),
-        raw: { formattedLocation: geocoded.formattedAddress },
+        raw: {
+          formattedLocation: geocoded.formattedAddress,
+          auditJobsQueued: queued.jobIds.length,
+        },
       }).eq('id', searchRun.id);
 
-      await db.from('api_usage_log').insert([
-        {
-          workspace_id: user.workspaceId,
-          user_id: user.id,
+      await Promise.all([
+        logApiUsage({
+          workspaceId: user.workspaceId,
+          userId: user.id,
           provider: 'google_geocoding',
           operation: 'geocode',
           units: 1,
-          metadata: { location: input.location },
-        },
-        {
-          workspace_id: user.workspaceId,
-          user_id: user.id,
+          metadata: { location: input.location, formattedAddress: geocoded.formattedAddress },
+        }),
+        logApiUsage({
+          workspaceId: user.workspaceId,
+          userId: user.id,
           provider: 'google_places',
           operation: 'text_search',
           units: googleResult.requests,
-          metadata: { category: input.category, radiusMiles: input.radiusMiles },
-        },
+          metadata: { category: input.category, radiusMiles: input.radiusMiles, businessesReturned: savedLeads.length },
+        }),
       ]);
+
+      const notices = [resultCapNotice];
+      if (queued.limitReached) notices.push('Your monthly analysis limit was reached. The remaining businesses were saved without analysis.');
+      if (auditQueueError) notices.push(`The businesses were saved, but the selected analyses could not start: ${auditQueueError}`);
+      if (queued.jobIds.length) notices.push(`${queued.jobIds.length} website analysis${queued.jobIds.length === 1 ? ' is' : 'es are'} running in the background. You can leave this page and return later.`);
 
       return NextResponse.json({
         mode: 'live',
@@ -287,9 +283,10 @@ export async function POST(req: Request) {
         center: geocoded,
         campaignId: campaign.id,
         searchRunId: searchRun.id,
-        count: auditedLeads.length,
-        auditWarning: auditWarnings.length ? auditWarnings.join(' ') : null,
-        leads: auditedLeads,
+        count: leads.length,
+        auditWarning: notices.filter(Boolean).join(' ') || null,
+        auditJobIds: queued.jobIds,
+        leads,
       });
     } catch (error) {
       await db.from('search_runs').update({
@@ -359,11 +356,12 @@ async function saveBusinesses(options: {
       rating: business.rating,
       business_status: business.businessStatus,
       raw_provider_data: { ...((business.raw as Record<string, unknown>) || {}), distanceMiles: business.distanceMiles },
+      updated_at: new Date().toISOString(),
     };
 
     const { data: existing } = await db
       .from('leads')
-      .select('id,opportunity_score')
+      .select('id,opportunity_score,status')
       .eq('workspace_id', options.workspaceId)
       .eq('google_place_id', business.id)
       .maybeSingle();
@@ -371,7 +369,10 @@ async function saveBusinesses(options: {
     let leadId: string;
     let opportunityScore: number | null = existing?.opportunity_score ?? null;
     if (existing) {
-      const { error } = await db.from('leads').update(record).eq('id', existing.id);
+      const { error } = await db.from('leads').update({
+        ...record,
+        status: existing.status === 'archived' ? 'new' : existing.status,
+      }).eq('id', existing.id);
       if (error) throw new Error(`Could not update ${business.name}: ${error.message}`);
       leadId = existing.id;
     } else {

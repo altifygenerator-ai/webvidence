@@ -35,13 +35,22 @@ export async function runPageSpeed(url: string, apiKey?: string): Promise<PageSp
       return empty(body.error?.message || `PageSpeed failed (${response.status}).`);
     }
     const categories = body.lighthouseResult?.categories || {};
+    const performance = score(categories.performance?.score);
+    const accessibility = score(categories.accessibility?.score);
+    const seo = score(categories.seo?.score);
+    const bestPractices = score(categories['best-practices']?.score);
     return {
-      performance: score(categories.performance?.score),
-      accessibility: score(categories.accessibility?.score),
-      seo: score(categories.seo?.score),
-      bestPractices: score(categories['best-practices']?.score),
+      performance,
+      accessibility,
+      seo,
+      bestPractices,
       finalUrl: body.lighthouseResult?.finalUrl || null,
-      raw: body,
+      // Keep audits compact. The full Lighthouse response can be several MB and
+      // is not needed after the four category scores have been extracted.
+      raw: {
+        finalUrl: body.lighthouseResult?.finalUrl || null,
+        categories: { performance, accessibility, seo, bestPractices },
+      },
     };
   } catch (error) {
     return empty(error instanceof Error ? error.message : 'PageSpeed request failed.');

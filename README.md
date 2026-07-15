@@ -1,111 +1,107 @@
 # Webvidence
 
-Webvidence is an evidence-backed local prospecting SaaS for freelance web designers.
+Webvidence is a local prospecting and website-analysis SaaS for freelance web developers.
 
-## What is working in this build
+## Current product behavior
 
-- Supabase authentication, email confirmation, profiles, workspaces, RLS, campaigns, saved leads, audits, messages, plans, subscriptions, usage counters, and owner/admin access
-- Signed-in account state on the public homepage and header
-- Clear dashboard logout controls
-- Google Geocoding API for turning any U.S. city, ZIP, or address into coordinates
-- Google Places API (New) Text Search for real local business discovery
-- 25, 50, 75, and 100-mile search radiuses
-- Google pagination, radius filtering, Place ID deduplication, and closed-business filtering
-- Real business names, addresses, websites, phones, ratings, review counts, and Google listing links
-- Visible staged loading state while searching, saving, auditing, and scoring
-- Homepage inspection with factual findings and SSRF protections for public website URLs
-- Google PageSpeed Insights mobile performance, accessibility, SEO, and best-practice scores
-- Saved evidence scores and findings in Supabase
-- Individual lead files with verified evidence and pipeline activity
-- Evidence-backed outreach generation for Facebook, email, text, and follow-up
-- Outreach settings for the freelancer's service, price range, customer fit, and natural voice
-- Saved drafts, editing, copy-to-clipboard, sent status, lead notes, status, and follow-up dates
-- Free and paid plan usage enforcement for searches, analyses, outreach drafts, campaigns, saved leads, and exports
-- Durable per-user and per-IP rate limits, one-search-at-a-time locks, per-lead audit locks, and failed-search credit refunds
-- Hardened website fetching with private-network blocking, manual redirect validation, standard-port enforcement, and response-size limits
-- Direct browser database writes revoked for quota-controlled tables
-- Stripe checkout, upgrades, Customer Portal, webhooks, and plan syncing
-- Live dashboard usage reporting and owner-only operations overview
-- Public npm lockfile, ESLint flat config, and a zero-vulnerability production dependency audit at packaging time
+- Supabase accounts, email confirmation, password recovery, confirmation resend, profiles, workspaces, RLS, plans, subscriptions, usage counters, and owner/admin access
+- Google Geocoding and Places API search around any U.S. city, ZIP code, or address
+- 25, 50, 75, and 100-mile radius search with real business websites, phones, ratings, reviews, and Google listing links
+- Free plan: 5 searches, 10 website analyses, 20 outreach drafts, 5 active campaigns, and 50 open saved leads per month
+- Free searches are capped at 10 returned businesses so all five searches can be used without filling storage after the first search
+- Website audit samples the homepage and up to five important internal pages, then runs mobile PageSpeed on the homepage
+- Audits run through a database-backed job queue, continue after the search response, retry temporary worker failures, and refund the analysis credit after three internal failures
+- A business with no listed website receives a no-website finding without consuming an analysis credit
+- Saved evidence, PageSpeed scores, opportunity scores, pipeline status, notes, follow-up dates, and outreach history
+- Evidence-backed Facebook, email, text, and follow-up drafting
+- Bulk archive, restore, do-not-contact, and permanent deletion for archived leads
+- Stripe checkout, upgrades, Customer Portal, signed webhooks, and server-side paid-plan enforcement
+- Admin usage reporting for Google Geocoding, Places, PageSpeed, and OpenAI token usage with configurable cost estimates
+- Production Terms and Privacy pages with a configurable support email
 
 ## 1. Environment
 
-Copy `.env.example` to `.env.local` and add your values:
+Copy `.env.example` to `.env.local` and add your values.
 
-```env
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-SUPABASE_SECRET_KEY=sb_secret_...
-
-GOOGLE_PLACES_API_KEY=AIza...
-GOOGLE_GEOCODING_API_KEY=AIza...
-PAGESPEED_API_KEY=AIza...
-
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5-mini
-
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_STARTER=
-STRIPE_PRICE_FREELANCER=
-STRIPE_PRICE_STUDIO=
-
-ADMIN_EMAIL=jlccustoms@gmail.com
-DEMO_MODE=false
-BILLING_ENABLED=true
-RATE_LIMIT_SALT=generate_a_long_random_value
-```
-
-Generate `RATE_LIMIT_SALT` with:
+Generate the security values:
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-The same Google key may be used for all three Google variables when it is restricted to Places API (New), Geocoding API, and PageSpeed Insights API.
+Use one generated value for `RATE_LIMIT_SALT` and a different generated value for `CRON_SECRET`.
 
-`DEMO_MODE=false` is required for real Google results. Restart the development server after changing `.env.local`.
+The same restricted Google key can be used for Places, Geocoding, and PageSpeed. `DEMO_MODE=false` is required for live business results.
 
-If `OPENAI_API_KEY` is blank, Webvidence still creates a deterministic evidence-based draft so the workflow can be tested without AI charges.
+Set `NEXT_PUBLIC_SUPPORT_EMAIL` to an inbox you actually monitor before launch.
 
-## 2. Supabase
+The admin cost report uses list-price estimates configured in environment variables. Google free tiers, provider credits, model changes, and final invoices can make the real charge different.
 
-For a new project, run `supabase/001_initial.sql` in Supabase SQL Editor. It resets Webvidence public test tables and installs the full schema plus launch security. It does not delete Auth users.
+## 2. Supabase migrations
 
-For an existing Webvidence project that already ran `001_initial.sql`, run `supabase/002_launch_security.sql` once. It is additive and does not delete accounts, leads, campaigns, audits, messages, subscriptions, or usage. The app intentionally fails closed on search, audit, outreach, and checkout rate limiting until this migration is installed.
+### Existing live Webvidence project
 
-Set Supabase Authentication URL configuration for local testing:
+Do not rerun `001_initial.sql` because it resets Webvidence public tables.
 
-- Site URL: `http://localhost:3000`
-- Redirect URL: `http://localhost:3000/**`
+Run these missing migrations in order, skipping any one you already successfully applied:
 
-## 3. Start
+1. `supabase/002_launch_security.sql`
+2. `supabase/003_secret_key_rpc_fix.sql`
+3. `supabase/004_functionality_upgrade.sql`
+
+For the current live project that already received the rate-limit RPC repair, run only:
+
+```text
+supabase/004_functionality_upgrade.sql
+```
+
+Migration 004 is additive and preserves accounts, subscriptions, searches, leads, audits, messages, and usage.
+
+### Brand-new Supabase project
+
+Run all migrations in order:
+
+1. `001_initial.sql`
+2. `002_launch_security.sql`
+3. `003_secret_key_rpc_fix.sql`
+4. `004_functionality_upgrade.sql`
+
+Configure Supabase Authentication URLs:
+
+- Local Site URL: `http://localhost:3000`
+- Local redirect: `http://localhost:3000/**`
+- Production Site URL: `https://your-domain.com`
+- Production redirect: `https://your-domain.com/**`
+
+## 3. Vercel background recovery
+
+The search route starts audit jobs immediately using Next.js background work. A Vercel Cron route is also included to recover queued or stale jobs:
+
+```text
+/api/cron/audits
+```
+
+Add `CRON_SECRET` to Vercel. `vercel.json` schedules the recovery route once daily, which is compatible with Vercel Hobby. The dashboard polling endpoint also re-kicks queued jobs while a user is viewing results.
+
+## 4. Start locally
 
 ```powershell
-npm install
+npm install --legacy-peer-deps
 npm run dev
 ```
 
-Open `http://localhost:3000`, sign in, then use **Find prospects** in the dashboard.
+## 5. Launch verification
 
-## 4. Search and outreach test
-
-1. Search a trade around any U.S. location.
-2. Analyze at least one returned business.
-3. Open **Pipeline**.
-4. Open that lead's file.
-5. Save your normal voice in **Settings**.
-6. Generate a Facebook, email, text, or follow-up draft.
-7. Edit it, copy it, mark it sent, and save a follow-up date.
-
-The response should show a **LIVE DATA** badge. If it says **DEMO DATA**, check `DEMO_MODE=false` and restart the server.
-
-## Stripe subscriptions
-
-Pricing actions are tied to the authenticated Supabase user. Signed-out visitors who select a paid plan are sent through signup or sign-in with the selected plan preserved. After authentication or email confirmation, Webvidence returns them to that plan and opens Stripe.
-
-For upgrades from an existing paid subscription, enable Stripe Customer Portal subscription switching and include all three prices. The app uses Stripe's subscription-update confirmation portal flow so Stripe can show prorations and avoid creating duplicate subscriptions.
+1. Create a fresh free account and confirm the email.
+2. Run five separate searches with up to 10 businesses each.
+3. Confirm the sixth search is blocked by the monthly limit, not by campaign or lead storage.
+4. Queue analyses from a search and leave the page. Return to Pipeline and confirm results finish.
+5. Confirm a no-website business gets a finding without increasing analysis usage.
+6. Test a reachable site, an unreachable site, and a site that blocks automated requests.
+7. Archive several leads at once, open Archived, restore one, and permanently delete another.
+8. Test Forgot password and Resend confirmation.
+9. Generate all four outreach types and verify usage and estimated cost logs.
+10. Complete a Stripe purchase, upgrade, cancellation, and failed-payment test.
 
 ## Verification commands
 
@@ -116,16 +112,3 @@ npm test
 npm run build
 npm audit --omit=dev
 ```
-
-
-## Launch security model
-
-- Plan values are read from protected Supabase profile records and updated only by the signature-verified Stripe webhook or the owner-only admin route.
-- Searches, audits, and outreach drafts consume server-side monthly counters before expensive work begins. Failed provider operations refund the reserved credit.
-- Search, audit, generation, billing, and workspace mutations are rate limited in Postgres so limits apply across multiple server instances.
-- Only one business search can run per account at a time, and duplicate audits for the same lead are locked.
-- Authenticated browser clients have read-only access to quota-controlled tables; writes pass through server routes/actions.
-- Website audits reject private/reserved addresses, internal hostnames, nonstandard ports, unsafe redirects, and oversized responses.
-- Paid access is granted only for Stripe subscriptions in `active` or `trialing` state.
-
-No web application is literally impossible to attack. Keep Supabase, Stripe, Google, OpenAI, and deployment keys private; enable provider quotas and alerts; keep dependencies patched; and review logs before increasing public traffic.

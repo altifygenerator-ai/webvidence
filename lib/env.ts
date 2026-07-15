@@ -16,6 +16,13 @@ const schema = z.object({
   DEMO_MODE: z.string().default('false'),
   BILLING_ENABLED: z.string().default('false'),
   RATE_LIMIT_SALT: z.preprocess((value) => value === '' ? undefined : value, z.string().min(16).optional()),
+  CRON_SECRET: z.string().min(16).optional(),
+  NEXT_PUBLIC_SUPPORT_EMAIL: z.string().email().default('support@webvidence.app'),
+  GOOGLE_GEOCODING_COST_PER_1000: z.coerce.number().nonnegative().default(5),
+  GOOGLE_PLACES_TEXT_SEARCH_COST_PER_1000: z.coerce.number().nonnegative().default(32),
+  PAGESPEED_COST_PER_1000: z.coerce.number().nonnegative().default(0),
+  OPENAI_INPUT_COST_PER_1M: z.coerce.number().nonnegative().default(0),
+  OPENAI_OUTPUT_COST_PER_1M: z.coerce.number().nonnegative().default(0),
 });
 
 export const env = schema.parse(process.env);

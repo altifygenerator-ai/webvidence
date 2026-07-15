@@ -70,6 +70,8 @@ export default async function Signup({
         <input className="input" name="password" type="password" minLength={10} placeholder="Password (10+ characters)" required />
         <button className="btn primary">Create account</button>
         <small className="muted">No card required. The free plan includes 5 local searches and 10 complete opportunity analyses each month.</small>
+        <small className="auth-legal">By creating an account, you agree to the <Link href="/terms">Terms</Link> and acknowledge the <Link href="/privacy">Privacy Policy</Link>.</small>
+        <div className="auth-help-links"><Link href={`/resend-confirmation?next=${encodeURIComponent(nextPath)}`}>Already signed up but missing the confirmation email?</Link></div>
         <div className="auth-switch">Already have an account? <Link href={`/login?${loginQuery.toString()}`}>Sign in</Link></div>
       </form>
     </>

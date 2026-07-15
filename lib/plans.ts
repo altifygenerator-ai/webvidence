@@ -5,8 +5,8 @@ export type PaidPlanId = Exclude<CustomerPlanId, 'free'>;
 export const CUSTOMER_PLAN_ORDER: CustomerPlanId[] = ['free', 'starter', 'freelancer', 'studio'];
 
 export const PLANS = {
-  free: { name: 'Free', price: 0, searches: 5, audits: 10, messages: 20, campaigns: 1, saved: 20, exports: false, team: 1 },
-  starter: { name: 'Starter', price: 19, searches: 40, audits: 75, messages: 250, campaigns: 3, saved: 250, exports: true, team: 1 },
+  free: { name: 'Free', price: 0, searches: 5, audits: 10, messages: 20, campaigns: 5, saved: 50, exports: false, team: 1 },
+  starter: { name: 'Starter', price: 19, searches: 40, audits: 75, messages: 250, campaigns: 10, saved: 250, exports: true, team: 1 },
   freelancer: { name: 'Freelancer', price: 39, searches: 150, audits: 250, messages: 1000, campaigns: 25, saved: 2000, exports: true, team: 1 },
   studio: { name: 'Studio', price: 79, searches: 500, audits: 750, messages: 3000, campaigns: 100, saved: 10000, exports: true, team: 3 },
   admin: { name: 'Admin', price: 0, searches: 999999, audits: 999999, messages: 999999, campaigns: 999999, saved: 999999, exports: true, team: 99 },

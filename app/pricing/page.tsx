@@ -2,6 +2,7 @@ import { MarketingHeader } from '@/components/marketing-header';
 import { PlanAction } from '@/components/plan-action';
 import { CUSTOMER_PLAN_ORDER, PLANS, isPaidPlan } from '@/lib/plans';
 import { getViewer } from '@/lib/security/auth';
+import { MarketingFooter } from '@/components/marketing-footer';
 
 export default async function Pricing({
   searchParams,
@@ -58,6 +59,7 @@ export default async function Pricing({
           })}
         </div>
       </main>
+      <MarketingFooter />
     </>
   );
 }

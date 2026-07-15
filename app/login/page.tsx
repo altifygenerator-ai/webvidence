@@ -57,6 +57,7 @@ export default async function Login({
         <input className="input" name="email" type="email" placeholder="Email" required />
         <input className="input" name="password" type="password" placeholder="Password" required />
         <button className="btn primary">Sign in</button>
+        <div className="auth-help-links"><Link href="/forgot-password">Forgot password?</Link><Link href={`/resend-confirmation?next=${encodeURIComponent(nextPath)}`}>Resend confirmation email</Link></div>
         <div className="auth-switch">Need an account? <Link href={`/signup?${signupQuery.toString()}`}>Create one</Link></div>
       </form>
     </>
