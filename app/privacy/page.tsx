@@ -1,12 +1,44 @@
+import type { Metadata } from 'next';
 import { MarketingHeader } from '@/components/marketing-header';
 import { MarketingFooter } from '@/components/marketing-footer';
+import { JsonLd } from '@/components/json-ld';
+import { absoluteUrl, publicMetadata, SITE_URL } from '@/lib/seo';
+
+export const metadata: Metadata = publicMetadata({
+  title: 'Privacy Policy',
+  description: 'Learn what Webvidence collects, how business and website data is processed, which service providers are used, and what choices account holders have.',
+  path: '/privacy',
+  keywords: ['Webvidence privacy', 'privacy policy', 'Webvidence legal'],
+});
 
 const effectiveDate = 'July 15, 2026';
 
 export default function Privacy() {
   const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@webvidence.app';
+  const schema = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      '@id': `${absoluteUrl('/privacy')}#webpage`,
+      url: absoluteUrl('/privacy'),
+      name: 'Privacy Policy',
+      description: 'Privacy practices for Webvidence accounts, searches, audits, billing, and usage data.',
+      isPartOf: { '@id': `${SITE_URL}#website` },
+      inLanguage: 'en-US',
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Webvidence', item: absoluteUrl('/') },
+        { '@type': 'ListItem', position: 2, name: 'Privacy Policy', item: absoluteUrl('/privacy') },
+      ],
+    },
+  ];
+
   return (
     <>
+      <JsonLd data={schema} />
       <MarketingHeader />
       <main className="legal-page shell">
         <div className="eyebrow">Effective {effectiveDate}</div>

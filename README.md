@@ -112,3 +112,25 @@ npm test
 npm run build
 npm audit --omit=dev
 ```
+
+## Search Console and SEO setup
+
+The production canonical domain is `https://www.webvidence.app`.
+
+After deployment:
+
+1. Make `www.webvidence.app` the primary production domain in Vercel.
+2. Add `webvidence.app` to Google Search Console as a Domain property and verify it through DNS.
+3. Submit `https://www.webvidence.app/sitemap.xml` in Search Console.
+4. Inspect and request indexing for `/`, `/pricing`, `/faq`, and `/scores`.
+5. Optionally set `GOOGLE_SITE_VERIFICATION` in Vercel if you use Google's HTML-tag verification method instead of DNS.
+
+Public SEO endpoints:
+
+- `/sitemap.xml`
+- `/robots.txt`
+- `/manifest.webmanifest`
+- `/opengraph-image`
+- `/twitter-image`
+
+Private account, authentication, dashboard, and API routes are excluded from indexing.

@@ -14,7 +14,9 @@ export async function MarketingHeader() {
         <div className="header-stamp">Evidence-backed prospecting<br /><b>for independent web sellers</b></div>
         <nav className="main-nav" aria-label="Main navigation">
           <Link href="/#workflow">Workflow</Link>
+          <Link href="/scores">Scores</Link>
           <Link href="/pricing">Pricing</Link>
+          <Link href="/faq">FAQ</Link>
           {viewer ? <Link href="/dashboard">Dashboard</Link> : <Link href="/login">Sign in</Link>}
         </nav>
         {viewer ? (

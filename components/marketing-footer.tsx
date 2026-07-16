@@ -6,7 +6,10 @@ export function MarketingFooter() {
     <footer className="marketing-footer">
       <div className="shell marketing-footer-inner">
         <div><b>Webvidence</b><span>Evidence-backed prospecting for independent web sellers.</span></div>
-        <nav aria-label="Legal and support">
+        <nav aria-label="Product, legal, and support">
+          <Link href="/scores">Scores</Link>
+          <Link href="/pricing">Pricing</Link>
+          <Link href="/faq">FAQ</Link>
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
           <a href={`mailto:${supportEmail}`}>Support</a>

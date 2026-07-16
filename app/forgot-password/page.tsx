@@ -1,7 +1,12 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { MarketingHeader } from '@/components/marketing-header';
 import { createClient } from '@/lib/supabase/server';
+
+import { privateMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = privateMetadata('Reset password', 'Request a Webvidence password reset link.', '/forgot-password');
 
 export default async function ForgotPassword({ searchParams }: { searchParams: Promise<{ message?: string; error?: string }> }) {
   const params = await searchParams;

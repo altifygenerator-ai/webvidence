@@ -1,8 +1,13 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { MarketingHeader } from '@/components/marketing-header';
 import { createClient } from '@/lib/supabase/server';
 import { safeNextPath } from '@/lib/security/redirects';
+
+import { privateMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = privateMetadata('Resend confirmation', 'Request a new Webvidence email confirmation link.', '/resend-confirmation');
 
 export default async function ResendConfirmation({ searchParams }: { searchParams: Promise<{ message?: string; error?: string; next?: string }> }) {
   const params = await searchParams;

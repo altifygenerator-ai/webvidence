@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingHeader } from '@/components/marketing-header';
 import { isPaidPlan, PLANS } from '@/lib/plans';
@@ -5,6 +6,10 @@ import { planCheckoutPath, safeNextPath } from '@/lib/security/redirects';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getViewer } from '@/lib/security/auth';
+
+import { privateMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = privateMetadata('Sign in', 'Sign in to your Webvidence account.', '/login');
 
 export default async function Login({
   searchParams,

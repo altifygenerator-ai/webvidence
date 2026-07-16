@@ -16,3 +16,17 @@
 ## Required database change
 
 Existing projects must run `supabase/004_functionality_upgrade.sql`. Projects that never installed the secret-key RPC repair must run `003_secret_key_rpc_fix.sql` first.
+
+## SEO and Search Console release
+
+- Added canonical production domain support for `https://www.webvidence.app`
+- Added permanent non-www to www redirect
+- Added complete page metadata, Open Graph, Twitter cards, app icons, and manifest
+- Added dynamic `sitemap.xml` and `robots.txt`
+- Added Organization, WebSite, WebPage, SoftwareApplication, Offer, FAQPage, and BreadcrumbList JSON-LD where appropriate
+- Added public FAQ page
+- Added public opportunity-score explanation page based on the actual scoring code
+- Added public navigation and footer links to FAQ and score documentation
+- Added `noindex` metadata to account and recovery pages
+- Added private dashboard indexing protection
+- Added Google Search Console setup documentation
