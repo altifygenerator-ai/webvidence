@@ -8,7 +8,10 @@ import { isPaidPlan, planRank, priceId, type PaidPlanId } from '@/lib/plans';
 import { assertTrustedMutation, RequestSecurityError } from '@/lib/security/request';
 import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/rate-limit';
 
-const schema = z.object({ plan: z.enum(['starter', 'freelancer', 'studio']) });
+const schema = z.object({
+  plan: z.enum(['starter', 'freelancer', 'studio']),
+  trial: z.boolean().optional().default(false),
+});
 
 export async function POST(req: Request) {
   const user = await getViewer();
@@ -22,8 +25,11 @@ export async function POST(req: Request) {
   try {
     assertTrustedMutation(req, { requireJson: true });
     await enforceRateLimit(req, user.id, RATE_LIMITS.checkout);
-    const { plan } = schema.parse(await req.json());
+    const { plan, trial } = schema.parse(await req.json());
     if (!isPaidPlan(plan)) return NextResponse.json({ error: 'Invalid paid plan.' }, { status: 400 });
+    if (trial && plan !== 'freelancer') {
+      return NextResponse.json({ error: 'The 7-day trial is only available on the Freelancer plan.' }, { status: 400 });
+    }
 
     const currentRank = planRank(user.plan);
     const targetRank = planRank(plan);
@@ -44,7 +50,7 @@ export async function POST(req: Request) {
     const db = createAdminClient();
     const { data: billing } = await db
       .from('subscriptions')
-      .select('stripe_customer_id,stripe_subscription_id,status,plan')
+      .select('stripe_customer_id,stripe_subscription_id,status,plan,trial_end')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -55,6 +61,19 @@ export async function POST(req: Request) {
       billing?.stripe_subscription_id &&
       activeStatuses.has(billing.status),
     );
+    const wantsFreelancerTrial = trial && plan === 'freelancer';
+    const freelancerTrialEligible = Boolean(
+      wantsFreelancerTrial &&
+      user.plan === 'free' &&
+      !billing?.trial_end &&
+      !billing?.stripe_subscription_id,
+    );
+
+    if (wantsFreelancerTrial && !freelancerTrialEligible) {
+      return NextResponse.json({
+        error: 'The 7-day Freelancer trial is only available before an account has started a paid subscription or trial.',
+      }, { status: 409 });
+    }
 
     if (hasExistingPaidSubscription) {
       const subscription = await stripe.subscriptions.retrieve(billing!.stripe_subscription_id!);
@@ -88,16 +107,35 @@ export async function POST(req: Request) {
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'subscription',
+      payment_method_collection: 'always',
       line_items: [{ price: targetPrice, quantity: 1 }],
-      success_url: `${env.NEXT_PUBLIC_APP_URL}/dashboard/billing?success=1`,
+      success_url: `${env.NEXT_PUBLIC_APP_URL}/dashboard/billing?success=1${freelancerTrialEligible ? '&trial=1' : ''}`,
       cancel_url: `${env.NEXT_PUBLIC_APP_URL}/pricing`,
       client_reference_id: user.id,
       ...(billing?.stripe_customer_id
         ? { customer: billing.stripe_customer_id }
         : { customer_email: user.email }),
-      subscription_data: { metadata: { user_id: user.id, plan } },
-      metadata: { user_id: user.id, plan },
-    }, { idempotencyKey: `checkout:${user.id}:${plan}:${Math.floor(Date.now() / 300000)}` });
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          plan,
+          ...(freelancerTrialEligible ? { trial_offer: 'freelancer_7_day' } : {}),
+        },
+        ...(freelancerTrialEligible ? {
+          trial_period_days: 7,
+          trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
+        } : {}),
+      },
+      metadata: {
+        user_id: user.id,
+        plan,
+        ...(freelancerTrialEligible ? { trial_offer: 'freelancer_7_day' } : {}),
+      },
+    }, {
+      idempotencyKey: freelancerTrialEligible
+        ? `checkout:${user.id}:freelancer:trial-v1`
+        : `checkout:${user.id}:${plan}:${Math.floor(Date.now() / 300000)}`,
+    });
 
     if (!checkoutSession.url) return NextResponse.json({ error: 'Stripe did not return a checkout URL.' }, { status: 500 });
     return NextResponse.json({ url: checkoutSession.url, mode: 'checkout' });

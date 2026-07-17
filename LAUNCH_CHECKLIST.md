@@ -79,6 +79,10 @@
 - [ ] Customer Portal works
 - [ ] Webhook updates profile and subscription tables
 - [ ] Canceled, unpaid, and incomplete subscriptions fall back to Free
+- [ ] Freelancer checkout collects a card, starts a 7-day trial, and grants `trialing` access
+- [ ] Cancel the trial in the Customer Portal and confirm no first charge is made
+- [ ] Advance a Stripe test clock past day 7 and confirm the $39 Freelancer invoice is attempted
+- [ ] A previously trialed or subscribed account cannot start another Freelancer trial
 
 ## Reporting and legal
 

@@ -64,8 +64,12 @@ const faqs = [
     answer: 'The current free plan includes 5 local searches, 10 charged website analyses, 20 outreach drafts, 5 active campaigns, and room for 50 open saved leads each month. A business with no website does not use a charged website-analysis credit.',
   },
   {
-    question: 'Can I cancel a paid plan?',
-    answer: 'Yes. Paid subscribers can open the Stripe billing portal from the account area and cancel. Access normally continues through the end of the period already paid for.',
+    question: 'How does the 7-day Freelancer trial work?',
+    answer: 'Eligible new accounts can start the Freelancer plan with a card and use the full plan for 7 days. Stripe charges $39 per month when the trial ends unless you cancel first. The trial is available once per account and is not added to Starter or Studio checkout.',
+  },
+  {
+    question: 'Can I cancel a paid plan or trial?',
+    answer: 'Yes. Open the Stripe billing portal from the account area to cancel. A trial can be canceled before the first charge. Paid access normally continues through the end of the period already paid for.',
   },
   {
     question: 'Can another user see my searches or leads?',

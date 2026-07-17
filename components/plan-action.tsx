@@ -18,13 +18,14 @@ type Props = {
   signedIn: boolean;
   currentPlan?: PlanId | null;
   autoStart?: boolean;
+  trialAvailable?: boolean;
 };
 
-async function requestCheckout(targetPlan: PaidPlanId) {
+async function requestCheckout(targetPlan: PaidPlanId, trial = false) {
   const response = await fetch('/api/stripe/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan: targetPlan }),
+    body: JSON.stringify({ plan: targetPlan, trial }),
   });
   const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
   if (response.status === 401) {
@@ -35,7 +36,13 @@ async function requestCheckout(targetPlan: PaidPlanId) {
   return data.url;
 }
 
-export function PlanAction({ plan, signedIn, currentPlan = 'free', autoStart = false }: Props) {
+export function PlanAction({
+  plan,
+  signedIn,
+  currentPlan = 'free',
+  autoStart = false,
+  trialAvailable = true,
+}: Props) {
   const activePlan: PlanId = currentPlan || 'free';
   const isAdmin = activePlan === 'admin';
   const currentRank = planRank(activePlan);
@@ -44,16 +51,17 @@ export function PlanAction({ plan, signedIn, currentPlan = 'free', autoStart = f
   const isLower = !isAdmin && targetRank < currentRank;
   const canPurchase = signedIn && !isAdmin && isPaidPlan(plan) && targetRank > currentRank;
   const suggestedUpgrade = nextPaidPlan(activePlan);
+  const useFreelancerTrial = plan === 'freelancer' && activePlan === 'free' && trialAvailable;
   const [loading, setLoading] = useState(autoStart && canPurchase);
   const [error, setError] = useState('');
   const [showCurrentMessage, setShowCurrentMessage] = useState(autoStart && isCurrent);
   const started = useRef(false);
 
-  const startCheckout = useCallback(async (targetPlan: PaidPlanId) => {
+  const startCheckout = useCallback(async (targetPlan: PaidPlanId, trial = false) => {
     setLoading(true);
     setError('');
     try {
-      const url = await requestCheckout(targetPlan);
+      const url = await requestCheckout(targetPlan, trial);
       if (url) window.location.assign(url);
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start checkout.');
@@ -65,7 +73,7 @@ export function PlanAction({ plan, signedIn, currentPlan = 'free', autoStart = f
     if (!autoStart || started.current || !canPurchase || !isPaidPlan(plan)) return;
     started.current = true;
     let active = true;
-    void requestCheckout(plan)
+    void requestCheckout(plan, useFreelancerTrial)
       .then((url) => { if (url && active) window.location.assign(url); })
       .catch((checkoutError: unknown) => {
         if (!active) return;
@@ -73,11 +81,19 @@ export function PlanAction({ plan, signedIn, currentPlan = 'free', autoStart = f
         setLoading(false);
       });
     return () => { active = false; };
-  }, [autoStart, canPurchase, plan]);
+  }, [autoStart, canPurchase, plan, useFreelancerTrial]);
 
   if (!signedIn) {
     if (plan === 'free') return <Link className="btn primary" href="/signup">Start free</Link>;
-    return <Link className="btn primary" href={authPath('signup', plan)}>Choose {PLANS[plan].name}</Link>;
+    const label = plan === 'freelancer' && trialAvailable
+      ? 'Start 7-day free trial'
+      : `Choose ${PLANS[plan].name}`;
+    return (
+      <div className="plan-action">
+        <Link className="btn primary" href={authPath('signup', plan)}>{label}</Link>
+        {plan === 'freelancer' && trialAvailable ? <small className="trial-note">Card required · $39/month after 7 days unless canceled</small> : null}
+      </div>
+    );
   }
 
   if (isAdmin) {
@@ -115,13 +131,20 @@ export function PlanAction({ plan, signedIn, currentPlan = 'free', autoStart = f
     );
   }
 
+  const buttonLabel = loading
+    ? activePlan === 'free' ? 'Opening checkout…' : 'Opening upgrade…'
+    : useFreelancerTrial
+      ? 'Start 7-day free trial'
+      : activePlan === 'free'
+        ? `Choose ${PLANS[plan].name}`
+        : `Upgrade to ${PLANS[plan].name}`;
+
   return (
     <div className="plan-action">
-      <button className="btn primary" type="button" onClick={() => void startCheckout(plan)} disabled={loading}>
-        {loading
-          ? activePlan === 'free' ? 'Opening checkout…' : 'Opening upgrade…'
-          : activePlan === 'free' ? `Choose ${PLANS[plan].name}` : `Upgrade to ${PLANS[plan].name}`}
+      <button className="btn primary" type="button" onClick={() => void startCheckout(plan, useFreelancerTrial)} disabled={loading}>
+        {buttonLabel}
       </button>
+      {useFreelancerTrial ? <small className="trial-note">Card required · $39/month after 7 days unless canceled</small> : null}
       {autoStart && loading ? <small className="plan-status">Taking you to secure Stripe checkout…</small> : null}
       {error ? <small className="plan-error">{error}</small> : null}
     </div>

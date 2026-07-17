@@ -90,6 +90,21 @@ describe('paid-wall bypass guards', () => {
     expect(webhook).toContain("['active', 'trialing'].includes(subscription.status)");
     expect(webhook).toContain('uses an unrecognized Stripe price');
   });
+
+
+  it('offers a card-required seven-day trial only on the Freelancer plan', () => {
+    const checkout = source('app/api/stripe/checkout/route.ts');
+    const pricing = source('components/plan-action.tsx');
+    expect(checkout).toContain("plan !== 'freelancer'");
+    expect(checkout).toContain("payment_method_collection: 'always'");
+    expect(checkout).toContain('trial_period_days: 7');
+    expect(checkout).toContain("missing_payment_method: 'cancel'");
+    expect(checkout).toContain('!billing?.trial_end');
+    expect(checkout).toContain('!billing?.stripe_subscription_id');
+    expect(checkout).toContain('freelancer:trial-v1');
+    expect(pricing).toContain('Start 7-day free trial');
+    expect(pricing).toContain('$39/month after 7 days unless canceled');
+  });
 });
 
 

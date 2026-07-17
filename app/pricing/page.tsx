@@ -5,12 +5,13 @@ import { MarketingHeader } from '@/components/marketing-header';
 import { PlanAction } from '@/components/plan-action';
 import { CUSTOMER_PLAN_ORDER, PLANS, isPaidPlan } from '@/lib/plans';
 import { getViewer } from '@/lib/security/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { MarketingFooter } from '@/components/marketing-footer';
 import { absoluteUrl, publicMetadata, SITE_URL } from '@/lib/seo';
 
 export const metadata: Metadata = publicMetadata({
   title: 'Pricing for Freelance Web Designers',
-  description: 'Start free with local business searches, website analyses, opportunity scores, outreach drafts, and a saved prospect pipeline. Paid plans start at $19 per month.',
+  description: 'Start free with local business searches and website analyses, or try the Freelancer plan free for 7 days with a card. Paid plans start at $19 per month.',
   path: '/pricing',
   keywords: [
     'Webvidence pricing',
@@ -29,6 +30,17 @@ export default async function Pricing({
   const params = await searchParams;
   const intendedPlan = isPaidPlan(params.plan) ? params.plan : null;
   const shouldCheckout = params.checkout === '1';
+  let freelancerTrialAvailable = !viewer;
+
+  if (viewer && viewer.plan === 'free') {
+    const db = createAdminClient();
+    const { data: billing } = await db
+      .from('subscriptions')
+      .select('stripe_subscription_id,trial_end')
+      .eq('user_id', viewer.id)
+      .maybeSingle();
+    freelancerTrialAvailable = !billing?.stripe_subscription_id && !billing?.trial_end;
+  }
 
   const pricingSchema = {
     '@context': 'https://schema.org',
@@ -52,7 +64,7 @@ export default async function Pricing({
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
           url: absoluteUrl(`/pricing?plan=${id}`),
-          description: `${plan.searches} searches, ${plan.audits} analyzed prospects, ${plan.messages} outreach drafts, ${plan.campaigns} active campaigns, and ${plan.saved} saved leads per month.`,
+          description: `${plan.searches} searches, ${plan.audits} analyzed prospects, ${plan.messages} outreach drafts, ${plan.campaigns} active campaigns, and ${plan.saved} saved leads per month.${id === 'freelancer' ? ' New eligible accounts can start with a 7-day card-required trial.' : ''}`,
         };
       }),
     },
@@ -91,6 +103,7 @@ export default async function Pricing({
             const plan = PLANS[id];
             return (
               <div className={`price ${id === 'freelancer' ? 'featured' : ''}`} key={id}>
+                {id === 'freelancer' && freelancerTrialAvailable ? <div className="trial-callout">Try every Freelancer feature free for 7 days</div> : null}
                 <h3>{plan.name}</h3>
                 <strong>${plan.price}</strong>
                 <span>/mo</span>
@@ -107,6 +120,7 @@ export default async function Pricing({
                   signedIn={Boolean(viewer)}
                   currentPlan={viewer?.plan}
                   autoStart={Boolean(viewer && intendedPlan === id && shouldCheckout)}
+                  trialAvailable={id === 'freelancer' && freelancerTrialAvailable}
                 />
               </div>
             );

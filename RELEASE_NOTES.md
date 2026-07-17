@@ -37,3 +37,13 @@ Existing projects must run `supabase/004_functionality_upgrade.sql`. Projects th
 - Added country-aware geocoding and Google Places filtering for worldwide searches.
 - Kept the legacy `location` API input so previous clients and saved campaigns remain compatible.
 - No database migration is required; existing campaigns and leads are unchanged.
+
+## Public UI refresh + Freelancer trial
+
+- Refreshed the public homepage, header, footer, pricing presentation, and shared public-page styling while leaving the dashboard workflow intact.
+- Preserved the worldwide market form, campaign reopening, pipeline analysis, audit polling, and existing saved data behavior.
+- Added a card-required 7-day Freelancer trial for eligible Free accounts.
+- The trial uses the existing Freelancer Stripe price and converts to $39/month unless canceled before the trial ends.
+- Trialing subscriptions receive Freelancer access through the existing signed webhook flow.
+- Trial eligibility is enforced server-side and is limited to accounts without a previous Stripe subscription or recorded trial.
+- Added trial status and end-date messaging to the billing page, plus matching FAQ and terms language.
