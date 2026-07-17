@@ -83,13 +83,13 @@ export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boole
         </div>
         {leads.map((lead) => (
           <div className="row bulk-row" key={lead.id}>
-            <span><input type="checkbox" aria-label={`Select ${lead.name}`} checked={selected.includes(lead.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, lead.id] : current.filter((id) => id !== lead.id))} /></span>
-            <span>
+            <span className="lead-select-cell"><input type="checkbox" aria-label={`Select ${lead.name}`} checked={selected.includes(lead.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, lead.id] : current.filter((id) => id !== lead.id))} /></span>
+            <span className="lead-business-cell">
               <b>{lead.name}</b><br />
               <small className="muted">{[lead.city, lead.state].filter(Boolean).join(', ') || 'Location unavailable'} · {lead.reviews || 0} reviews</small>
             </span>
-            <span>{String(lead.status || 'new').replaceAll('_', ' ')}</span>
-            <span><b>{lead.opportunity_score ?? '—'}</b></span>
+            <span className="lead-status-cell" data-label="Status">{String(lead.status || 'new').replaceAll('_', ' ')}</span>
+            <span className="lead-score-cell" data-label="Score"><b>{lead.opportunity_score ?? '—'}</b></span>
             <span className="lead-row-actions">
               {!archived ? <LeadAnalysisButton leadId={lead.id} hasAudit={Boolean(lead.last_audited_at)} compact /> : null}
               <Link className="btn" href={`/dashboard/leads/${lead.id}`}>Open file</Link>
