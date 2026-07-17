@@ -5,7 +5,7 @@ Webvidence is a local prospecting and website-analysis SaaS for freelance web de
 ## Current product behavior
 
 - Supabase accounts, email confirmation, password recovery, confirmation resend, profiles, workspaces, RLS, plans, subscriptions, usage counters, and owner/admin access
-- Google Geocoding and Places API search around any U.S. city, ZIP code, or address
+- Google Geocoding and Places API search around cities and postal codes worldwide, with country-aware disambiguation
 - 25, 50, 75, and 100-mile radius search with real business websites, phones, ratings, reviews, and Google listing links
 - Free plan: 5 searches, 10 website analyses, 20 outreach drafts, 5 active campaigns, and 50 open saved leads per month
 - Free searches are capped at 10 returned businesses so all five searches can be used without filling storage after the first search

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
+import { COUNTRIES } from '@/lib/countries';
 
 type Finding = {
   code: string;
@@ -277,10 +278,16 @@ export default function Campaigns() {
           <span>Business type</span>
           <input className="input" name="category" placeholder="Roofers, plumbers, cabin rentals…" required />
         </label>
-        <label>
-          <span>Location</span>
-          <input className="input" name="location" placeholder="City, state, ZIP, or full address" autoComplete="off" required />
-        </label>
+        <fieldset className="location-field-group">
+          <legend>Market location</legend>
+          <div className="location-fields">
+            <input className="input" name="city" placeholder="City or postal code" autoComplete="address-level2" aria-label="City or postal code" required />
+            <input className="input" name="region" placeholder="State / province" autoComplete="address-level1" aria-label="State or province" />
+            <select className="input" name="countryCode" defaultValue="US" autoComplete="country" aria-label="Country" required>
+              {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+            </select>
+          </div>
+        </fieldset>
         <label>
           <span>Radius</span>
           <select className="input" name="radiusMiles" defaultValue="50">
@@ -314,7 +321,7 @@ export default function Campaigns() {
       </form>
 
       <p className="search-help">
-        Enter any U.S. city, ZIP code, or address. Google locates that point, searches within the radius you choose, and Webvidence then audits the selected business websites.
+        Enter a city or postal code, add the state or province when helpful, and choose the country. Google locates that market, searches within the radius you choose, and Webvidence audits the selected business websites.
       </p>
 
       {loading && <div className="search-progress" role="status" aria-live="polite"><span className="search-spinner"/><div><b>{loadingStage}</b><small>The business search should finish quickly. Website analyses continue in the background.</small></div></div>}

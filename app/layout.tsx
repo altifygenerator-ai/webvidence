@@ -24,9 +24,7 @@ export const metadata: Metadata = {
   creator: SITE_NAME,
   publisher: SITE_NAME,
   category: 'business software',
-  alternates: {
-    canonical: SITE_URL,
-  },
+  alternates: { canonical: SITE_URL },
   manifest: '/manifest.webmanifest',
   formatDetection: {
     email: false,
@@ -66,9 +64,9 @@ export const metadata: Metadata = {
     description: DEFAULT_DESCRIPTION,
     images: [absoluteUrl('/twitter-image')],
   },
-  verification: {
-    google: 'm-YEgwPceFgQ86PNpzD8to3uHXX_Zhl0K5zfJQ0Loig',
-  },
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export const viewport: Viewport = {
@@ -78,11 +76,7 @@ export const viewport: Viewport = {
   colorScheme: 'dark',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>

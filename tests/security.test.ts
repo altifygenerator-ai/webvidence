@@ -132,3 +132,18 @@ describe('launch functionality guards', () => {
     expect(bulk).toContain(".eq('workspace_id', user.workspaceId)");
   });
 });
+
+describe('worldwide market search', () => {
+  it('removes the hardcoded U.S. restriction while keeping country-aware searches', () => {
+    const provider = source('lib/providers/google-places.ts');
+    const route = source('app/api/search/route.ts');
+    expect(provider).not.toContain("country:US");
+    expect(provider).not.toContain("regionCode: 'US'");
+    expect(provider).toContain('countryCode?: string');
+    expect(provider).toContain('placeCountryCode !== countryCode.toUpperCase()');
+    expect(route).toContain('city: optionalText');
+    expect(route).toContain('region: optionalText');
+    expect(route).toContain('countryCode: optionalText');
+    expect(route).toContain('// `location` remains supported for older clients');
+  });
+});

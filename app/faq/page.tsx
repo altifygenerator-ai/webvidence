@@ -37,7 +37,7 @@ const faqs = [
   },
   {
     question: 'How far can I search from a location?',
-    answer: 'You can search around a U.S. city, ZIP code, or address using the radius options shown in the app. Results depend on what Google returns for the category and area, so a search is a useful prospect list rather than a promise that every business in the radius will appear.',
+    answer: 'You can search around a city or postal code worldwide. Add the state or province when needed, choose the country, and select a radius. Results depend on what Google returns for that category and market, so a search is a useful prospect list rather than a promise that every business in the radius will appear.',
   },
   {
     question: 'How many pages does the website audit check?',

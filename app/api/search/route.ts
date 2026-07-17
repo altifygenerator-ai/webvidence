@@ -12,6 +12,7 @@ import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/ra
 import { acquireOperationLock, releaseOperationLock, type OperationLock } from '@/lib/security/operation-lock';
 import { queueLeadAudits, processAuditJobs } from '@/lib/jobs/audits';
 import { logApiUsage } from '@/lib/data/api-usage';
+import { countryName, isCountryCode } from '@/lib/countries';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -36,12 +37,29 @@ type SavedLead = {
   auditJobId?: string | null;
 };
 
+const optionalText = (max: number) => z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().max(max).optional(),
+);
+
 const schema = z.object({
   category: z.string().trim().min(2).max(80),
-  location: z.string().trim().min(2).max(160),
+  // `location` remains supported for older clients and previously deployed forms.
+  location: optionalText(240),
+  city: optionalText(120),
+  region: optionalText(120),
+  countryCode: optionalText(2),
   radiusMiles: z.coerce.number().int().min(5).max(100).default(50),
   maxResults: z.coerce.number().int().min(5).max(40).default(20),
   auditCount: z.coerce.number().int().min(0).max(10).default(5),
+}).superRefine((value, ctx) => {
+  if (value.location) return;
+  if (!value.city) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'Enter a city or postal code.' });
+  }
+  if (!value.countryCode || !isCountryCode(value.countryCode)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['countryCode'], message: 'Choose a valid country.' });
+  }
 });
 
 class SearchHttpError extends Error {
@@ -64,6 +82,12 @@ export async function POST(req: Request) {
     assertTrustedMutation(req, { requireJson: true });
     await enforceRateLimit(req, user.id, RATE_LIMITS.search);
     const input = schema.parse(await req.json());
+    const countryCode = input.countryCode?.toUpperCase();
+    const requestedLocation = input.location || [
+      input.city,
+      input.region,
+      countryCode ? countryName(countryCode) : undefined,
+    ].filter(Boolean).join(', ');
 
     searchLock = await acquireOperationLock({
       userId: user.id,
@@ -76,7 +100,7 @@ export async function POST(req: Request) {
 
     if (flags.demo) {
       return NextResponse.json({
-        leads: demoSearch(input.category, input.location),
+        leads: demoSearch(input.category, requestedLocation),
         mode: 'demo',
         warning: 'DEMO_MODE is true. Set DEMO_MODE=false and restart the server to use Google Places.',
       });
@@ -94,7 +118,7 @@ export async function POST(req: Request) {
     await consumeSearch(user);
     searchCharged = true;
 
-    const geocoded = await geocodeLocation(input.location, geocodingKey);
+    const geocoded = await geocodeLocation(requestedLocation, geocodingKey, countryCode);
     const db = createAdminClient();
 
     const { data: matchingCampaign } = await db
@@ -197,6 +221,7 @@ export async function POST(req: Request) {
         radiusMiles: input.radiusMiles,
         maxResults: effectiveMaxResults,
         apiKey: placesKey,
+        countryCode,
       });
 
       const savedLeads = await saveBusinesses({
@@ -260,7 +285,7 @@ export async function POST(req: Request) {
           provider: 'google_geocoding',
           operation: 'geocode',
           units: 1,
-          metadata: { location: input.location, formattedAddress: geocoded.formattedAddress },
+          metadata: { location: requestedLocation, countryCode: countryCode || null, formattedAddress: geocoded.formattedAddress },
         }),
         logApiUsage({
           workspaceId: user.workspaceId,
@@ -268,7 +293,7 @@ export async function POST(req: Request) {
           provider: 'google_places',
           operation: 'text_search',
           units: googleResult.requests,
-          metadata: { category: input.category, radiusMiles: input.radiusMiles, businessesReturned: savedLeads.length },
+          metadata: { category: input.category, radiusMiles: input.radiusMiles, countryCode: countryCode || null, businessesReturned: savedLeads.length },
         }),
       ]);
 

@@ -30,3 +30,10 @@ Existing projects must run `supabase/004_functionality_upgrade.sql`. Projects th
 - Added `noindex` metadata to account and recovery pages
 - Added private dashboard indexing protection
 - Added Google Search Console setup documentation
+
+## Worldwide market search
+
+- Replaced the single U.S.-only location field with compact city/postal code, state/province, and country inputs.
+- Added country-aware geocoding and Google Places filtering for worldwide searches.
+- Kept the legacy `location` API input so previous clients and saved campaigns remain compatible.
+- No database migration is required; existing campaigns and leads are unchanged.

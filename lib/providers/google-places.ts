@@ -8,6 +8,7 @@ export type GoogleBusiness = {
   city: string;
   state: string;
   postalCode: string;
+  countryCode: string;
   latitude: number;
   longitude: number;
   website: string | null;
@@ -96,11 +97,14 @@ export function distanceMiles(a: Coordinates, b: Coordinates) {
   return 2 * EARTH_RADIUS_MILES * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-export async function geocodeLocation(location: string, apiKey: string) {
+export async function geocodeLocation(location: string, apiKey: string, countryCode?: string) {
   const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
   url.searchParams.set('address', location);
-  url.searchParams.set('components', 'country:US');
-  url.searchParams.set('region', 'us');
+  if (countryCode) {
+    const normalizedCountryCode = countryCode.trim().toUpperCase();
+    url.searchParams.set('components', `country:${normalizedCountryCode}`);
+    url.searchParams.set('region', normalizedCountryCode.toLowerCase());
+  }
   url.searchParams.set('key', apiKey);
 
   const response = await fetchWithTimeout(url, { method: 'GET' }, 12_000);
@@ -129,8 +133,9 @@ export async function searchBusinesses(options: {
   radiusMiles: number;
   maxResults: number;
   apiKey: string;
+  countryCode?: string;
 }) {
-  const { category, center, radiusMiles, maxResults, apiKey } = options;
+  const { category, center, radiusMiles, maxResults, apiKey, countryCode } = options;
   const rectangle = boundingBox(center, radiusMiles);
   const fieldMask = [
     'places.id',
@@ -158,10 +163,10 @@ export async function searchBusinesses(options: {
       textQuery: category,
       pageSize: 20,
       languageCode: 'en',
-      regionCode: 'US',
       includePureServiceAreaBusinesses: true,
       locationRestriction: { rectangle },
     };
+    if (countryCode) requestBody.regionCode = countryCode.toUpperCase();
     if (pageToken) requestBody.pageToken = pageToken;
 
     const response = await fetchWithTimeout(
@@ -195,6 +200,8 @@ export async function searchBusinesses(options: {
         component(place.addressComponents, ['administrative_area_level_2']);
       const state = component(place.addressComponents, ['administrative_area_level_1'], true);
       const postalCode = component(place.addressComponents, ['postal_code']);
+      const placeCountryCode = component(place.addressComponents, ['country'], true).toUpperCase();
+      if (countryCode && placeCountryCode && placeCountryCode !== countryCode.toUpperCase()) continue;
 
       collected.set(place.id, {
         id: place.id,
@@ -204,6 +211,7 @@ export async function searchBusinesses(options: {
         city,
         state,
         postalCode,
+        countryCode: placeCountryCode,
         latitude: place.location?.latitude ?? center.latitude,
         longitude: place.location?.longitude ?? center.longitude,
         website: normalizeWebsite(place.websiteUri),
