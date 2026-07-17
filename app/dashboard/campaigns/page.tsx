@@ -50,7 +50,7 @@ type Campaign = {
   category: string;
   location: string;
   radius_miles: number;
-  status: 'active' | 'paused' | 'archived';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 };
 
 
@@ -83,6 +83,8 @@ export default function Campaigns() {
   const [loadingStage, setLoadingStage] = useState('Locating the market…');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaignLoading, setCampaignLoading] = useState('');
+  const [openingCampaignId, setOpeningCampaignId] = useState('');
+  const [openedCampaign, setOpenedCampaign] = useState<Campaign | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   useEffect(() => {
@@ -115,13 +117,13 @@ export default function Campaigns() {
         setLeads((current) => current.map((lead) => {
           const item = data.items?.find((candidate: { leadId: string }) => candidate.leadId === lead.id);
           if (!item) return lead;
-          if (item.audit) {
+          if (item.status === 'completed' && item.audit) {
             return {
               ...lead,
               audit: item.audit,
               opportunityScore: item.audit.score,
-              auditStatus: item.status === 'failed' ? 'failed' : 'completed',
-              auditError: item.error || null,
+              auditStatus: 'completed',
+              auditError: null,
             };
           }
           return {
@@ -144,6 +146,26 @@ export default function Campaigns() {
   async function refreshUsage() {
     const response = await fetch('/api/usage', { cache: 'no-store' });
     if (response.ok) setUsage(await response.json());
+  }
+
+  async function openCampaign(campaign: Campaign) {
+    setOpeningCampaignId(campaign.id);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/campaigns?campaignId=${encodeURIComponent(campaign.id)}`, { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not reopen that campaign.');
+      setLeads(data.leads || []);
+      setOpenedCampaign(data.campaign || campaign);
+      setMode('live');
+      setNotice(`${data.count || 0} saved prospect${data.count === 1 ? '' : 's'} loaded from ${campaign.category} in ${campaign.location}. Reopening a campaign does not use a search credit.`);
+      window.setTimeout(() => document.getElementById('campaign-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    } catch (campaignError) {
+      setError(campaignError instanceof Error ? campaignError.message : 'Could not reopen that campaign.');
+    } finally {
+      setOpeningCampaignId('');
+    }
   }
 
   async function updateCampaign(campaignId: string, status: 'active' | 'paused' | 'archived') {
@@ -173,6 +195,7 @@ export default function Campaigns() {
     setError('');
     setNotice('');
     setLeads([]);
+    setOpenedCampaign(null);
     const stages = [
       'Searching Google for active businesses…',
       'Collecting websites and business details…',
@@ -256,6 +279,7 @@ export default function Campaigns() {
                 <div><b>{campaign.category}</b><span>{campaign.location} · {campaign.radius_miles} miles</span></div>
                 <span className="tag">{campaign.status}</span>
                 <div className="campaign-actions">
+                  <button className="btn" type="button" onClick={() => void openCampaign(campaign)} disabled={openingCampaignId === campaign.id}>{openingCampaignId === campaign.id ? 'Opening…' : 'Open results'}</button>
                   <button className="btn" type="button" onClick={() => void updateCampaign(campaign.id, campaign.status === 'paused' ? 'active' : 'paused')} disabled={campaignLoading === campaign.id}>{campaign.status === 'paused' ? 'Resume' : 'Pause'}</button>
                   <button className="btn" type="button" onClick={() => void updateCampaign(campaign.id, 'archived')} disabled={campaignLoading === campaign.id}>{campaignLoading === campaign.id ? 'Saving…' : 'Archive'}</button>
                 </div>
@@ -325,19 +349,19 @@ export default function Campaigns() {
       </p>
 
       {loading && <div className="search-progress" role="status" aria-live="polite"><span className="search-spinner"/><div><b>{loadingStage}</b><small>The business search should finish quickly. Website analyses continue in the background.</small></div></div>}
-      {error && <div className="notice notice-error"><b>Search could not finish.</b><br/>{error}<small className="error-help">Check the location spelling, Google API restrictions, plan usage, and server terminal for details.</small></div>}
+      {error && <div className="notice notice-error"><b>Could not finish.</b><br/>{error}<small className="error-help">Check the location spelling, Google API restrictions, plan usage, and server terminal for details.</small></div>}
       {notice && <div className="notice">{notice}</div>}
 
-      {!loading && !error && mode && leads.length === 0 ? <div className="notice">No matching businesses were returned inside that radius. Try a broader category, a larger radius, or a nearby city.</div> : null}
+      {!loading && !error && mode && leads.length === 0 ? <div className="notice">{openedCampaign ? 'No active prospects remain in this campaign. Archived leads are still available from the pipeline archive.' : 'No matching businesses were returned inside that radius. Try a broader category, a larger radius, or a nearby city.'}</div> : null}
 
       {leads.length > 0 && (
-        <section className="section results-section">
+        <section className="section results-section" id="campaign-results">
           <div className="results-heading">
             <div>
               <div className="eyebrow">Search results</div>
-              <h3>{leads.length} businesses collected</h3>
+              <h3>{leads.length} {openedCampaign ? 'saved businesses' : 'businesses collected'}</h3>
             </div>
-            <small>Highest evidence scores indicate stronger website opportunities.</small>
+            <small>{openedCampaign ? `Loaded from ${openedCampaign.category} in ${openedCampaign.location}. No search credit was used.` : 'Highest evidence scores indicate stronger website opportunities.'}</small>
           </div>
 
           <div className="prospect-list">

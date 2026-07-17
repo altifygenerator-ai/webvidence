@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { OutreachComposer } from '@/components/outreach-composer';
+import { LeadAnalysisButton } from '@/components/lead-analysis-button';
 import { requireViewer } from '@/lib/security/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -64,6 +65,11 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="lead-link-row">
+        <LeadAnalysisButton
+          leadId={lead.id}
+          hasAudit={Boolean(audit)}
+          initialRunning={auditJob?.status === 'queued' || auditJob?.status === 'running'}
+        />
         {lead.website ? <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a> : null}
         {lead.google_maps_url ? <a className="btn" href={lead.google_maps_url} target="_blank" rel="noreferrer">Open Google listing</a> : null}
       </div>
@@ -89,7 +95,7 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
               ))}
             </div>
           </>
-        ) : <div className={`notice ${auditJob?.status === 'failed' ? 'notice-error' : ''}`}>{auditJob?.status === 'queued' || auditJob?.status === 'running' ? 'Analysis is running in the background. You can leave this page and return later.' : auditJob?.status === 'failed' ? `The analysis worker could not finish after ${auditJob.attempts || 1} attempt${auditJob.attempts === 1 ? '' : 's'}: ${auditJob.error_message || 'Unknown processing error.'}` : 'Run an analysis from the prospect search screen before generating evidence-backed outreach.'}</div>}
+        ) : <div className={`notice ${auditJob?.status === 'failed' ? 'notice-error' : ''}`}>{auditJob?.status === 'queued' || auditJob?.status === 'running' ? 'Analysis is running in the background. You can leave this page and return later.' : auditJob?.status === 'failed' ? `The analysis worker could not finish after ${auditJob.attempts || 1} attempt${auditJob.attempts === 1 ? '' : 's'}: ${auditJob.error_message || 'Unknown processing error.'}` : 'Run an analysis here to create verified findings before generating evidence-backed outreach.'}</div>}
       </section>
 
       <OutreachComposer

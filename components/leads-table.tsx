@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { LeadAnalysisButton } from '@/components/lead-analysis-button';
 
 type Lead = {
   id: string;
@@ -13,6 +14,7 @@ type Lead = {
   status: string;
   opportunity_score: number | null;
   reviews: number | null;
+  last_audited_at?: string | null;
 };
 
 export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boolean }) {
@@ -89,7 +91,8 @@ export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boole
             <span>{String(lead.status || 'new').replaceAll('_', ' ')}</span>
             <span><b>{lead.opportunity_score ?? '—'}</b></span>
             <span className="lead-row-actions">
-              <Link className="btn primary" href={`/dashboard/leads/${lead.id}`}>Open file</Link>
+              {!archived ? <LeadAnalysisButton leadId={lead.id} hasAudit={Boolean(lead.last_audited_at)} compact /> : null}
+              <Link className="btn" href={`/dashboard/leads/${lead.id}`}>Open file</Link>
               {lead.website ? <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Site</a> : null}
             </span>
           </div>
