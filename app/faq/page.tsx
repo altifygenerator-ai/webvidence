@@ -40,6 +40,10 @@ const faqs = [
     answer: 'You can search around a city or postal code worldwide. Add the state or province when needed, choose the country, and select a radius. Results depend on what Google returns for that category and market, so a search is a useful prospect list rather than a promise that every business in the radius will appear.',
   },
   {
+    question: 'How does Webvidence choose which businesses to show?',
+    answer: 'Mixed search checks several parts of the selected radius, combines the matching listings, removes duplicates, and rotates in businesses that are not already saved in that campaign. You can also choose Hidden opportunities, Best Google matches, or Closest first. It is still based on businesses returned by Google, so it cannot guarantee every business in the market.',
+  },
+  {
     question: 'How many pages does the website audit check?',
     answer: 'Webvidence checks the homepage and can sample up to five useful internal pages. It gives priority to pages such as services, contact, booking, locations, about, and project pages when those links are available.',
   },

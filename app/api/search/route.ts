@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getViewer } from '@/lib/security/auth';
 import { consumeSearch, refundUsage } from '@/lib/security/entitlements';
 import { demoSearch } from '@/lib/providers/demo';
-import { geocodeLocation, searchBusinesses, type GoogleBusiness } from '@/lib/providers/google-places';
+import { geocodeLocation, searchBusinesses, type GoogleBusiness, type SearchResultMode } from '@/lib/providers/google-places';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { flags } from '@/lib/env';
 import { PLANS } from '@/lib/plans';
@@ -52,6 +52,7 @@ const schema = z.object({
   radiusMiles: z.coerce.number().int().min(5).max(100).default(50),
   maxResults: z.coerce.number().int().min(5).max(40).default(20),
   auditCount: z.coerce.number().int().min(0).max(10).default(5),
+  resultMode: z.enum(['mixed', 'best_match', 'hidden', 'closest']).default('mixed'),
 }).superRefine((value, ctx) => {
   if (value.location) return;
   if (!value.city) {
@@ -61,6 +62,15 @@ const schema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['countryCode'], message: 'Choose a valid country.' });
   }
 });
+
+
+const DISCOVERY_COVERAGE = {
+  free: { requestBudget: 2, poolSize: 30 },
+  starter: { requestBudget: 3, poolSize: 50 },
+  freelancer: { requestBudget: 5, poolSize: 80 },
+  studio: { requestBudget: 8, poolSize: 120 },
+  admin: { requestBudget: 8, poolSize: 120 },
+} as const;
 
 class SearchHttpError extends Error {
   status: number;
@@ -215,6 +225,18 @@ export async function POST(req: Request) {
     if (runError) throw new Error(`Search run could not be saved: ${runError.message}`);
 
     try {
+      const { data: priorCampaignLeads } = await db
+        .from('leads')
+        .select('google_place_id')
+        .eq('workspace_id', user.workspaceId)
+        .eq('campaign_id', campaign.id)
+        .not('google_place_id', 'is', null)
+        .limit(1000);
+      const previousPlaceIds = (priorCampaignLeads || [])
+        .map((lead) => lead.google_place_id)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+      const coverage = DISCOVERY_COVERAGE[user.isAdmin ? 'admin' : user.plan];
+
       const googleResult = await searchBusinesses({
         category: input.category,
         center: geocoded.coordinates,
@@ -222,6 +244,11 @@ export async function POST(req: Request) {
         maxResults: effectiveMaxResults,
         apiKey: placesKey,
         countryCode,
+        resultMode: input.resultMode,
+        requestBudget: coverage.requestBudget,
+        poolSize: coverage.poolSize,
+        seed: `${searchRun.id}:${input.category}:${geocoded.formattedAddress}`,
+        excludePlaceIds: previousPlaceIds,
       });
 
       const savedLeads = await saveBusinesses({
@@ -232,7 +259,7 @@ export async function POST(req: Request) {
       });
 
       const requestedAuditCount = Math.min(input.auditCount, savedLeads.length);
-      const auditTargets = prioritizeForAudit(savedLeads).slice(0, requestedAuditCount);
+      const auditTargets = prioritizeForAudit(savedLeads, input.resultMode).slice(0, requestedAuditCount);
       let auditQueueError = '';
       let queued: Awaited<ReturnType<typeof queueLeadAudits>> = { results: [], jobIds: [], limitReached: false };
       if (requestedAuditCount > 0) {
@@ -275,6 +302,10 @@ export async function POST(req: Request) {
         raw: {
           formattedLocation: geocoded.formattedAddress,
           auditJobsQueued: queued.jobIds.length,
+          resultMode: input.resultMode,
+          searchAreas: googleResult.areasSearched,
+          candidatesConsidered: googleResult.candidatesConsidered,
+          unseenCandidates: googleResult.unseenCandidates,
         },
       }).eq('id', searchRun.id);
 
@@ -293,11 +324,14 @@ export async function POST(req: Request) {
           provider: 'google_places',
           operation: 'text_search',
           units: googleResult.requests,
-          metadata: { category: input.category, radiusMiles: input.radiusMiles, countryCode: countryCode || null, businessesReturned: savedLeads.length },
+          metadata: { category: input.category, radiusMiles: input.radiusMiles, countryCode: countryCode || null, resultMode: input.resultMode, searchAreas: googleResult.areasSearched, candidatesConsidered: googleResult.candidatesConsidered, businessesReturned: savedLeads.length },
         }),
       ]);
 
-      const notices = [resultCapNotice];
+      const discoveryNotice = input.resultMode === 'best_match'
+        ? ''
+        : `${resultModeLabel(input.resultMode)} checked ${googleResult.areasSearched} part${googleResult.areasSearched === 1 ? '' : 's'} of the market and selected from ${googleResult.candidatesConsidered} matching listing${googleResult.candidatesConsidered === 1 ? '' : 's'}.`;
+      const notices = [resultCapNotice, discoveryNotice];
       if (queued.limitReached) notices.push('Your monthly analysis limit was reached. The remaining businesses were saved without analysis.');
       if (auditQueueError) notices.push(`The businesses were saved, but the selected analyses could not start: ${auditQueueError}`);
       if (queued.jobIds.length) notices.push(`${queued.jobIds.length} website analysis${queued.jobIds.length === 1 ? ' is' : 'es are'} running in the background. You can leave this page and return later.`);
@@ -429,10 +463,21 @@ async function saveBusinesses(options: {
   return saved;
 }
 
-function prioritizeForAudit<T extends { website: string | null; reviews: number }>(leads: T[]) {
+function prioritizeForAudit<T extends { website: string | null; reviews: number }>(
+  leads: T[],
+  resultMode: SearchResultMode,
+) {
   return [...leads].sort((a, b) => {
     if (!a.website && b.website) return -1;
     if (a.website && !b.website) return 1;
+    if (resultMode === 'mixed' || resultMode === 'hidden') return a.reviews - b.reviews;
     return b.reviews - a.reviews;
   });
+}
+
+function resultModeLabel(mode: SearchResultMode) {
+  if (mode === 'hidden') return 'Hidden-opportunity search';
+  if (mode === 'closest') return 'Closest-first search';
+  if (mode === 'mixed') return 'Mixed search';
+  return 'Best-match search';
 }

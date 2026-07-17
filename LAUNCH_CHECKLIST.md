@@ -101,3 +101,10 @@
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm audit --omit=dev`
+
+## Broader market discovery check
+
+- Run one Mixed search and confirm the completion notice reports more than one market area.
+- Run the same campaign again and confirm new businesses are preferred while earlier prospects remain available through Open results.
+- Try Hidden opportunities and confirm smaller listings or businesses without websites appear more often.
+- Confirm Google Places usage increases by no more than the plan request budget: Free 2, Starter 3, Freelancer 5, Studio 8 per search, plus one geocoding request.

@@ -1,3 +1,11 @@
+## Broader market discovery update
+
+- Added Mixed, Hidden opportunities, Best Google matches, and Closest first search modes.
+- Mixed and Hidden searches check several parts of the selected radius instead of relying only on Google’s first ranked batch.
+- New searches prefer businesses that are not already saved in the same campaign, then use previous results only when needed to fill the requested count.
+- Search coverage is cost-capped by plan: Free 2 requests / 30-candidate pool, Starter 3 / 50, Freelancer 5 / 80, Studio 8 / 120.
+- No database migration or Google Cloud setting change is required.
+
 # Webvidence functionality upgrade
 
 ## Added

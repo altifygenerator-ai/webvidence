@@ -197,7 +197,7 @@ export default function Campaigns() {
     setLeads([]);
     setOpenedCampaign(null);
     const stages = [
-      'Searching Google for active businesses…',
+      'Searching several parts of the market…',
       'Collecting websites and business details…',
       'Saving prospects to your workspace…',
       'Queuing selected websites for analysis…',
@@ -322,6 +322,15 @@ export default function Campaigns() {
           </select>
         </label>
         <label>
+          <span>Result mix</span>
+          <select className="input" name="resultMode" defaultValue="mixed" title="Choose how Webvidence builds the result set">
+            <option value="mixed">Mixed opportunities</option>
+            <option value="hidden">Hidden opportunities</option>
+            <option value="best_match">Best Google matches</option>
+            <option value="closest">Closest first</option>
+          </select>
+        </label>
+        <label>
           <span>Businesses</span>
           <select className="input" name="maxResults" defaultValue="10">
             <option value="10">Up to 10</option>
@@ -345,7 +354,7 @@ export default function Campaigns() {
       </form>
 
       <p className="search-help">
-        Enter a city or postal code, add the state or province when helpful, and choose the country. Google locates that market, searches within the radius you choose, and Webvidence audits the selected business websites.
+        Mixed search checks several parts of the radius instead of only returning Google’s first batch. Hidden opportunities leans toward smaller listings, fewer reviews, and businesses without a website. Previous campaign results stay saved and are skipped when enough new matches are available.
       </p>
 
       {loading && <div className="search-progress" role="status" aria-live="polite"><span className="search-spinner"/><div><b>{loadingStage}</b><small>The business search should finish quickly. Website analyses continue in the background.</small></div></div>}

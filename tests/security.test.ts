@@ -148,6 +148,22 @@ describe('launch functionality guards', () => {
   });
 });
 
+describe('broader market discovery', () => {
+  it('caps Google request coverage by plan and keeps mixed search as the backward-compatible default', () => {
+    const route = source('app/api/search/route.ts');
+    const provider = source('lib/providers/google-places.ts');
+    const campaignPage = source('app/dashboard/campaigns/page.tsx');
+    expect(route).toContain("resultMode: z.enum(['mixed', 'best_match', 'hidden', 'closest']).default('mixed')");
+    expect(route).toContain('free: { requestBudget: 2, poolSize: 30 }');
+    expect(route).toContain('freelancer: { requestBudget: 5, poolSize: 80 }');
+    expect(route).toContain('studio: { requestBudget: 8, poolSize: 120 }');
+    expect(provider).toContain('buildSearchAreas');
+    expect(provider).toContain('excludePlaceIds');
+    expect(campaignPage).toContain('Mixed opportunities');
+    expect(campaignPage).toContain('Hidden opportunities');
+  });
+});
+
 describe('worldwide market search', () => {
   it('removes the hardcoded U.S. restriction while keeping country-aware searches', () => {
     const provider = source('lib/providers/google-places.ts');
