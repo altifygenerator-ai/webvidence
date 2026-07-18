@@ -55,3 +55,14 @@ Existing projects must run `supabase/004_functionality_upgrade.sql`. Projects th
 - Trialing subscriptions receive Freelancer access through the existing signed webhook flow.
 - Trial eligibility is enforced server-side and is limited to accounts without a previous Stripe subscription or recorded trial.
 - Added trial status and end-date messaging to the billing page, plus matching FAQ and terms language.
+
+## Mobile workspace pass
+
+- Replaced the full desktop sidebar on small screens with a compact sticky workspace header and menu.
+- Added a fixed mobile shortcut bar for Overview, Search, Pipeline, and Settings.
+- Kept the desktop sidebar and desktop page layouts unchanged.
+- Reworked campaign controls, usage counters, and the worldwide search form for one-handed mobile use.
+- Converted saved-prospect rows into mobile cards with visible status, score, analysis, file, and website actions.
+- Reworked search-result cards, lead files, audit findings, outreach drafts, billing, and settings for narrow screens.
+- Increased touch targets and input sizing to reduce missed taps and prevent iPhone form zoom.
+- Added safe-area spacing for modern iPhone navigation areas and removed horizontal page overflow.
