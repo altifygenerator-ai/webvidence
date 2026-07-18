@@ -122,9 +122,16 @@ export default function FAQPage() {
 
         <div className="faq-layout">
           <aside className="resource-aside">
-            <span>Need the score breakdown?</span>
-            <p>See the actual points used by the audit and how Google review activity affects the final opportunity score.</p>
-            <Link className="text-link" href="/scores">How scoring works <span>↗</span></Link>
+            <div className="resource-aside-block">
+              <span>Need the score breakdown?</span>
+              <p>See the actual points used by the audit and how Google review activity affects the final opportunity score.</p>
+              <Link className="text-link" href="/scores">How scoring works <span>↗</span></Link>
+            </div>
+            <div className="resource-aside-block">
+              <span>Looking for the longer guides?</span>
+              <p>Read practical notes on finding clients, reviewing websites, outreach, and follow-up without turning this site into a wall of blog posts.</p>
+              <Link className="text-link" href="/articles">Browse articles <span>↗</span></Link>
+            </div>
           </aside>
           <section className="faq-list" aria-label="Frequently asked questions">
             {faqs.map((item, index) => (

@@ -13,7 +13,7 @@ export function MarketingFooter() {
         </div>
         <div className="footer-links">
           <div><b>Product</b><Link href="/#product-tour">How it works</Link><Link href="/scores">Scores</Link><Link href="/pricing">Pricing</Link></div>
-          <div><b>Help</b><Link href="/faq">FAQ</Link><a href={`mailto:${supportEmail}`}>Support</a></div>
+          <div><b>Help</b><Link href="/faq">FAQ</Link><Link href="/articles">Articles</Link><a href={`mailto:${supportEmail}`}>Support</a></div>
           <div><b>Legal</b><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></div>
         </div>
       </div>

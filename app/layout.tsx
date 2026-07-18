@@ -24,7 +24,10 @@ export const metadata: Metadata = {
   creator: SITE_NAME,
   publisher: SITE_NAME,
   category: 'business software',
-  alternates: { canonical: SITE_URL },
+  alternates: {
+    canonical: SITE_URL,
+    types: { 'application/rss+xml': absoluteUrl('/articles/feed.xml') },
+  },
   manifest: '/manifest.webmanifest',
   formatDetection: {
     email: false,

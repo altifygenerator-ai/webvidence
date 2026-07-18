@@ -15,6 +15,8 @@ export const PUBLIC_KEYWORDS = [
   'website redesign leads',
   'Google Maps prospecting',
   'web design outreach',
+  'web design client acquisition',
+  'freelance web developer marketing',
 ];
 
 export function absoluteUrl(path = '/') {
