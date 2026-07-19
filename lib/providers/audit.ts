@@ -28,6 +28,12 @@ export type WebsiteAudit = {
   raw: Record<string, unknown>;
 };
 
+type AccessIssue = {
+  type: 'blocked' | 'unreachable' | 'invalid';
+  reason: string;
+  httpStatus?: number | null;
+};
+
 type PageSnapshot = {
   requestedUrl: string;
   finalUrl: string;
@@ -41,6 +47,8 @@ type PageSnapshot = {
   hasSchema: boolean;
   hasContactLink: boolean;
   links: string[];
+  accessBlocked: boolean;
+  accessReason: string | null;
 };
 
 const MAX_PAGES = 6;
@@ -74,11 +82,12 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
   try {
     safeUrl = await validatePublicUrl(url);
   } catch (error) {
+    const reason = error instanceof Error ? error.message : 'The website URL is invalid.';
     findings.push({
       code: 'unsafe_or_invalid_url',
       label: 'Website URL could not be safely checked',
       severity: 'high',
-      evidence: error instanceof Error ? error.message : 'The website URL is invalid.',
+      evidence: reason,
       sourceUrl: url,
     });
     return finish({
@@ -89,46 +98,84 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
       description: null,
       findings,
       pageSpeed: null,
-      status: 'failed',
+      status: 'partial',
       pages: [],
+      accessIssue: { type: 'invalid', reason, httpStatus: null },
     });
   }
 
   const pageLimit = Math.max(1, Math.min(options?.maxPages || MAX_PAGES, MAX_PAGES));
   let homepage: PageSnapshot | null = null;
   let status: WebsiteAudit['status'] = 'completed';
+  let accessIssue: AccessIssue | null = null;
   const pages: PageSnapshot[] = [];
-  const pageErrors: Array<{ url: string; message: string }> = [];
+  const pageErrors: Array<{ url: string; message: string; httpStatus?: number }> = [];
 
   try {
     homepage = await fetchPageSnapshot(safeUrl);
     pages.push(homepage);
 
-    if (homepage.httpStatus >= 400) {
+    if (homepage.accessBlocked) {
+      status = 'partial';
+      accessIssue = {
+        type: 'blocked',
+        reason: homepage.accessReason || 'The website blocked the automated review.',
+        httpStatus: homepage.httpStatus,
+      };
       findings.push({
-        code: 'http_error',
+        code: 'automated_check_blocked',
+        label: 'Automated review was blocked',
+        severity: 'low',
+        evidence: `${accessIssue.reason} The website exists, but its content needs a manual review before outreach.`,
+        sourceUrl: homepage.finalUrl,
+        metadata: { httpStatus: homepage.httpStatus, manualReviewRequired: true },
+      });
+    } else if (homepage.httpStatus === 404 || homepage.httpStatus === 410) {
+      status = 'partial';
+      findings.push({
+        code: 'homepage_not_found',
+        label: 'Listed website returns a missing-page response',
+        severity: 'high',
+        evidence: `The listed homepage returned HTTP ${homepage.httpStatus} when Webvidence checked it.`,
+        sourceUrl: homepage.finalUrl,
+        metadata: { httpStatus: homepage.httpStatus },
+      });
+    } else if (homepage.httpStatus >= 400) {
+      status = 'partial';
+      findings.push({
+        code: 'homepage_http_error',
         label: 'Website returned an error',
         severity: 'high',
         evidence: `The homepage returned HTTP ${homepage.httpStatus}.`,
         sourceUrl: homepage.finalUrl,
+        metadata: { httpStatus: homepage.httpStatus },
       });
+    } else {
+      const candidates = prioritizeInternalLinks(homepage.links, new URL(homepage.finalUrl)).slice(0, pageLimit - 1);
+      const extraPages = await mapWithConcurrency(candidates, 2, async (candidate) => {
+        try {
+          const page = await fetchPageSnapshot(new URL(candidate));
+          if (page.accessBlocked || page.httpStatus >= 400) {
+            pageErrors.push({
+              url: candidate,
+              message: page.accessReason || `The linked page returned HTTP ${page.httpStatus}.`,
+              httpStatus: page.httpStatus,
+            });
+            return null;
+          }
+          return page;
+        } catch (error) {
+          pageErrors.push({
+            url: candidate,
+            message: describeFetchError(error),
+          });
+          return null;
+        }
+      });
+      pages.push(...extraPages.filter((page): page is PageSnapshot => Boolean(page)));
+      inspectSite(pages, findings);
     }
 
-    const candidates = prioritizeInternalLinks(homepage.links, new URL(homepage.finalUrl)).slice(0, pageLimit - 1);
-    const extraPages = await mapWithConcurrency(candidates, 2, async (candidate) => {
-      try {
-        return await fetchPageSnapshot(new URL(candidate));
-      } catch (error) {
-        pageErrors.push({
-          url: candidate,
-          message: describeFetchError(error),
-        });
-        return null;
-      }
-    });
-    pages.push(...extraPages.filter((page): page is PageSnapshot => Boolean(page)));
-
-    inspectSite(pages, findings);
     if (pageErrors.length > 0) {
       status = 'partial';
       findings.push({
@@ -142,20 +189,22 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
     }
   } catch (error) {
     const message = describeFetchError(error);
+    const failureType = classifyFetchFailure(error);
     findings.push({
-      code: 'unreachable',
-      label: 'Website could not be reached',
+      code: 'website_unreachable',
+      label: 'Website could not be reached by the automated review',
       severity: 'high',
-      evidence: message,
+      evidence: `${message} A manual check is recommended before outreach.`,
       sourceUrl: safeUrl.toString(),
-      metadata: { failureType: classifyFetchFailure(error) },
+      metadata: { failureType, manualReviewRequired: true },
     });
-    status = 'failed';
+    accessIssue = { type: 'unreachable', reason: message, httpStatus: null };
+    status = 'partial';
   }
 
   let pageSpeed: PageSpeedScores | null = null;
   const finalUrl = homepage?.finalUrl || safeUrl.toString();
-  if (options?.runPageSpeed !== false && status !== 'failed') {
+  if (options?.runPageSpeed !== false) {
     pageSpeed = await runPageSpeed(finalUrl, process.env.PAGESPEED_API_KEY);
     addPageSpeedFindings(pageSpeed, findings, finalUrl);
     if (pageSpeed.error) status = 'partial';
@@ -172,6 +221,7 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
     status,
     pages,
     pageErrors,
+    accessIssue,
   });
 }
 
@@ -396,7 +446,8 @@ function finish(input: {
   pageSpeed: PageSpeedScores | null;
   status: WebsiteAudit['status'];
   pages: PageSnapshot[];
-  pageErrors?: Array<{ url: string; message: string }>;
+  pageErrors?: Array<{ url: string; message: string; httpStatus?: number }>;
+  accessIssue?: AccessIssue | null;
 }): WebsiteAudit {
   const issuePoints = input.findings.reduce((total, finding) => {
     if (finding.severity === 'high') return total + 20;
@@ -428,8 +479,12 @@ function finish(input: {
         title: page.title,
         metaDescription: page.description,
         textLength: page.textLength,
+        accessBlocked: page.accessBlocked,
+        accessReason: page.accessReason,
       })),
       pageErrors: input.pageErrors || [],
+      accessIssue: input.accessIssue || null,
+      manualReviewRequired: Boolean(input.accessIssue),
       crawlLimit: MAX_PAGES,
       pagespeed: input.pageSpeed?.raw ?? null,
       pagespeedError: input.pageSpeed?.error ?? null,
@@ -441,11 +496,16 @@ async function fetchPageSnapshot(initialUrl: URL): Promise<PageSnapshot> {
   const fetched = await fetchPublicPage(initialUrl);
   const response = fetched.response;
   const contentType = response.headers.get('content-type') || '';
-  if (!contentType.toLowerCase().includes('text/html')) {
+  const textLike = !contentType || /(?:text|html|xhtml|json|xml)/i.test(contentType);
+  const statusCouldBeBlocked = [401, 403, 406, 409, 418, 429, 451, 503].includes(response.status);
+  if (!textLike && !statusCouldBeBlocked) {
     throw new Error(`The page returned ${contentType || 'an unknown content type'} instead of HTML.`);
   }
-  const html = await readLimitedText(response, MAX_PAGE_BYTES);
+
+  const html = textLike || statusCouldBeBlocked ? await readLimitedText(response, MAX_PAGE_BYTES) : '';
   const finalUrl = fetched.finalUrl.toString();
+  const accessReason = detectAutomatedAccessBlock(response.status, html, response.headers);
+  const accessBlocked = Boolean(accessReason);
   return {
     requestedUrl: initialUrl.toString(),
     finalUrl,
@@ -454,12 +514,41 @@ async function fetchPageSnapshot(initialUrl: URL): Promise<PageSnapshot> {
     title: extractTitle(html),
     description: extractMetaDescription(html),
     textLength: stripHtml(html).length,
-    hasForm: /<form\b/i.test(html),
-    hasTel: /href\s*=\s*["']tel:/i.test(html),
-    hasSchema: /application\/ld\+json/i.test(html),
-    hasContactLink: /href\s*=\s*["'][^"']*(contact|quote|estimate|book|appointment|schedule)/i.test(html),
-    links: extractInternalLinks(html, new URL(finalUrl)),
+    hasForm: !accessBlocked && /<form\b/i.test(html),
+    hasTel: !accessBlocked && /href\s*=\s*["']tel:/i.test(html),
+    hasSchema: !accessBlocked && /application\/ld\+json/i.test(html),
+    hasContactLink: !accessBlocked && /href\s*=\s*["'][^"']*(contact|quote|estimate|book|appointment|schedule)/i.test(html),
+    links: accessBlocked ? [] : extractInternalLinks(html, new URL(finalUrl)),
+    accessBlocked,
+    accessReason,
   };
+}
+
+export function detectAutomatedAccessBlock(status: number, html: string, headers?: Headers) {
+  if (status === 429) return 'The website rate-limited the automated check with HTTP 429.';
+  if ([401, 403, 406, 418, 451].includes(status)) {
+    return `The website denied the automated check with HTTP ${status}.`;
+  }
+
+  const lower = html.toLowerCase();
+  const server = headers?.get('server')?.toLowerCase() || '';
+  const challengeMarkers = [
+    'cf-chl-',
+    'challenge-platform',
+    'checking your browser',
+    'verify you are human',
+    'enable javascript and cookies to continue',
+    'attention required! | cloudflare',
+    '<title>just a moment',
+    'just a moment...',
+  ];
+  const hasChallenge = challengeMarkers.some((marker) => lower.includes(marker));
+  const likelyChallengePage = hasChallenge && (lower.length < 250_000 || server.includes('cloudflare'));
+  if (likelyChallengePage || (status === 503 && (server.includes('cloudflare') || hasChallenge))) {
+    return 'The website showed a bot-protection or browser-verification page instead of its normal content.';
+  }
+
+  return null;
 }
 
 function extractInternalLinks(html: string, base: URL) {
@@ -581,22 +670,14 @@ async function fetchPublicPage(initialUrl: URL) {
     if (visited.has(current.toString())) throw new Error('The website redirected in a loop.');
     visited.add(current.toString());
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
-    let response: Response;
-    try {
-      response = await fetch(current, {
-        signal: controller.signal,
-        redirect: 'manual',
-        cache: 'no-store',
-        headers: {
-          'user-agent': 'Mozilla/5.0 (compatible; WebvidenceAudit/1.1; +https://webvidence.app)',
-          accept: 'text/html,application/xhtml+xml',
-        },
-      });
-    } finally {
-      clearTimeout(timer);
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      response = await fetchPageResponse(current);
+      if (![500, 502, 503, 504].includes(response.status) || attempt === 1) break;
+      await response.body?.cancel().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    if (!response) throw new Error('The website did not return a response.');
 
     if (![301, 302, 303, 307, 308].includes(response.status)) {
       return { response, finalUrl: current };
@@ -608,6 +689,25 @@ async function fetchPublicPage(initialUrl: URL) {
   }
 
   throw new Error('The website redirected too many times.');
+}
+
+
+async function fetchPageResponse(url: URL) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      redirect: 'manual',
+      cache: 'no-store',
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; WebvidenceAudit/1.1; +https://webvidence.app)',
+        accept: 'text/html,application/xhtml+xml',
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function readLimitedText(response: Response, maxBytes: number) {

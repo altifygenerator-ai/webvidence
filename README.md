@@ -48,14 +48,15 @@ Run these missing migrations in order, skipping any one you already successfully
 1. `supabase/002_launch_security.sql`
 2. `supabase/003_secret_key_rpc_fix.sql`
 3. `supabase/004_functionality_upgrade.sql`
+4. `supabase/005_lead_priority_flow.sql`
 
-For the current live project that already received the rate-limit RPC repair, run only:
+For a current live project that already has migrations 003 and 004, run only:
 
 ```text
-supabase/004_functionality_upgrade.sql
+supabase/005_lead_priority_flow.sql
 ```
 
-Migration 004 is additive and preserves accounts, subscriptions, searches, leads, audits, messages, and usage.
+Migrations 004 and 005 are additive and preserve accounts, subscriptions, searches, leads, audits, messages, and usage. Back up `leads` and `messages` before applying any production migration.
 
 ### Brand-new Supabase project
 
@@ -65,6 +66,7 @@ Run all migrations in order:
 2. `002_launch_security.sql`
 3. `003_secret_key_rpc_fix.sql`
 4. `004_functionality_upgrade.sql`
+5. `005_lead_priority_flow.sql`
 
 Configure Supabase Authentication URLs:
 

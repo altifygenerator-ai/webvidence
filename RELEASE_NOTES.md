@@ -1,3 +1,16 @@
+# Webvidence Release Notes
+
+## Lead priority and manual-review update
+
+- Added a dashboard Today’s Work queue and Pipeline attention badge.
+- Added due, overdue, untouched, outcome, proposal, sequence-complete, and manual-review filters.
+- Added a manual 3/7/14-day follow-up schedule. Webvidence still does not send outreach automatically.
+- Added lead outcomes and prevented message/audit updates from moving advanced leads backward in the pipeline.
+- Added clear partial-audit handling for websites that block automated checks or cannot be reached.
+- Excluded blocked-check system findings from outreach claims.
+- Increased search-panel and outreach-editor text sizes.
+- Added the additive `supabase/005_lead_priority_flow.sql` migration. Run it after migration 004 and before deploying this application version.
+
 ## Broader market discovery update
 
 - Added Mixed, Hidden opportunities, Best Google matches, and Closest first search modes.

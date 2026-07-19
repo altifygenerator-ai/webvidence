@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { LeadAnalysisButton } from '@/components/lead-analysis-button';
+import { LEAD_OUTCOME_LABELS, type LeadOutcome, type PriorityAction } from '@/lib/leads/priority';
 
 type Lead = {
   id: string;
@@ -15,6 +16,13 @@ type Lead = {
   opportunity_score: number | null;
   reviews: number | null;
   last_audited_at?: string | null;
+  next_follow_up_at?: string | null;
+  follow_up_step?: number | null;
+  follow_up_stopped_at?: string | null;
+  lead_outcome?: LeadOutcome | null;
+  priority_action?: PriorityAction | null;
+  manual_review_required?: boolean;
+  manual_review_reason?: string | null;
 };
 
 export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boolean }) {
@@ -88,13 +96,22 @@ export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boole
               <b>{lead.name}</b><br />
               <small className="muted">{[lead.city, lead.state].filter(Boolean).join(', ') || 'Location unavailable'} · {lead.reviews || 0} reviews</small>
             </span>
-            <span className="lead-status-cell" data-label="Status">{String(lead.status || 'new').replaceAll('_', ' ')}</span>
-            <span className="lead-score-cell" data-label="Score"><b>{lead.opportunity_score ?? '—'}</b></span>
-            <span className="lead-row-actions">
-              {!archived ? <LeadAnalysisButton leadId={lead.id} hasAudit={Boolean(lead.last_audited_at)} compact /> : null}
-              <Link className="btn" href={`/dashboard/leads/${lead.id}`}>Open file</Link>
-              {lead.website ? <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Site</a> : null}
+            <span className="lead-status-cell" data-label="Status">
+              {lead.lead_outcome ? LEAD_OUTCOME_LABELS[lead.lead_outcome] : String(lead.status || 'new').replaceAll('_', ' ')}
             </span>
+            <span className="lead-score-cell" data-label="Score"><b>{lead.opportunity_score ?? '—'}</b></span>
+            <div className="lead-row-actions">
+              <div className="lead-action-summary">
+                {!archived && lead.manual_review_required ? <span className="pipeline-action-label priority-manual"><b>Manual review</b><small>{lead.manual_review_reason || 'The automated website check was blocked.'}</small></span> : null}
+                {!archived && lead.priority_action ? <span className={`pipeline-action-label priority-${lead.priority_action.kind}`}><b>{lead.priority_action.label}</b><small>{lead.priority_action.detail}</small></span> : null}
+              </div>
+              <div className="lead-action-buttons">
+                {!archived ? <LeadAnalysisButton leadId={lead.id} hasAudit={Boolean(lead.last_audited_at)} compact /> : null}
+                <Link className="btn lead-open-button" href={`/dashboard/leads/${lead.id}`}>Open file</Link>
+                {!archived && lead.priority_action?.rank && lead.priority_action.rank > 0 ? <Link className="btn outreach-link lead-work-button" href={`/dashboard/leads/${lead.id}#outreach`}>Work next</Link> : null}
+                {lead.website ? <a className="btn lead-site-button" href={lead.website} target="_blank" rel="noreferrer">Site</a> : null}
+              </div>
+            </div>
           </div>
         ))}
       </div>

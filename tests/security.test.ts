@@ -178,3 +178,46 @@ describe('worldwide market search', () => {
     expect(route).toContain('// `location` remains supported for older clients');
   });
 });
+
+describe('lead-priority upgrade guards', () => {
+  it('keeps migration 005 additive and preserves existing records', () => {
+    const migration = source('supabase/005_lead_priority_flow.sql').toLowerCase();
+    expect(migration).toContain('add column if not exists');
+    expect(migration).toContain('first_contacted_at');
+    expect(migration).toContain('manual_review_required');
+    expect(migration).not.toContain('drop table');
+    expect(migration).not.toContain('truncate ');
+    expect(migration).not.toMatch(/delete\s+from\s+public\./);
+  });
+
+  it('makes sent-message activity idempotent and workspace scoped', () => {
+    const route = source('app/api/messages/[id]/route.ts');
+    expect(route).toContain("current.status !== 'sent'");
+    expect(route).toContain(".eq('workspace_id', user.workspaceId)");
+    expect(route).toContain('buildSentMessageLeadUpdate');
+    expect(route).toContain('acquireOperationLock');
+    expect(route).toContain('releaseOperationLock');
+  });
+
+  it('does not use blocked-check findings as outreach claims', () => {
+    const generate = source('app/api/generate/route.ts');
+    expect(generate).toContain("'automated_check_blocked'");
+    expect(generate).toContain('NON_OUTREACH_FINDING_CODES');
+    expect(generate).toContain('Open it manually before creating website-specific outreach');
+    expect(generate.indexOf('await consumeMessage(user)')).toBeGreaterThan(generate.indexOf('manualReviewRequired'));
+  });
+
+  it('stores blocked or unreachable websites as partial manual-review results', () => {
+    const audit = source('lib/providers/audit.ts');
+    const save = source('lib/data/audits.ts');
+    expect(audit).toContain("code: 'automated_check_blocked'");
+    expect(audit).toContain("code: 'website_unreachable'");
+    expect(audit).toContain("status = 'partial'");
+    expect(save).toContain('manual_review_required: manualReviewRequired');
+  });
+
+  it('preserves advanced lead statuses during a re-analysis', () => {
+    const save = source('lib/data/audits.ts');
+    expect(save).toContain("['new', 'reviewing', 'ready_to_contact'].includes(currentLead.status)");
+  });
+});

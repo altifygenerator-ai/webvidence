@@ -9,6 +9,14 @@ import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/ra
 import { acquireOperationLock, releaseOperationLock, type OperationLock } from '@/lib/security/operation-lock';
 import { logApiUsage } from '@/lib/data/api-usage';
 
+const NON_OUTREACH_FINDING_CODES = new Set([
+  'automated_check_blocked',
+  'website_unreachable',
+  'unsafe_or_invalid_url',
+  'pagespeed_unavailable',
+  'partial_crawl',
+]);
+
 const schema = z.object({
   leadId: z.string().uuid(),
   channel: z.enum(['email', 'facebook', 'text', 'follow_up']),
@@ -73,6 +81,15 @@ export async function POST(req: Request) {
           metadata: {},
         }] };
 
+    const rawFindings = findings || [];
+    const manualReviewRequired = rawFindings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code));
+    const outreachFindings = rawFindings.filter((finding) => !NON_OUTREACH_FINDING_CODES.has(finding.code));
+    if (input.channel !== 'follow_up' && manualReviewRequired && !outreachFindings.some((finding) => finding.severity !== 'positive')) {
+      return NextResponse.json({
+        error: 'Webvidence could not fully inspect this website. Open it manually before creating website-specific outreach.',
+      }, { status: 409 });
+    }
+
     await consumeMessage(user);
     charged = true;
 
@@ -96,7 +113,7 @@ export async function POST(req: Request) {
       state: lead.state || '',
       website: lead.website,
       channel: input.channel,
-      findings: (findings || []).map((finding) => ({
+      findings: outreachFindings.map((finding) => ({
         code: finding.code,
         label: finding.label,
         severity: finding.severity,

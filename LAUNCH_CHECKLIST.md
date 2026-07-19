@@ -4,6 +4,7 @@
 
 - [ ] Existing live project ran `003_secret_key_rpc_fix.sql` if not already applied
 - [ ] Existing live project ran `004_functionality_upgrade.sql`
+- [ ] Existing live project ran `005_lead_priority_flow.sql`
 - [ ] `audit_jobs` shows `available_at`, `usage_reserved`, `credit_refunded`, and `result_status`
 - [ ] Existing users, subscriptions, leads, and messages are still present
 
@@ -108,3 +109,11 @@
 - Run the same campaign again and confirm new businesses are preferred while earlier prospects remain available through Open results.
 - Try Hidden opportunities and confirm smaller listings or businesses without websites appear more often.
 - Confirm Google Places usage increases by no more than the plan request budget: Free 2, Starter 3, Freelancer 5, Studio 8 per search, plus one geocoding request.
+
+## Lead priority upgrade deployment
+
+1. Back up the live `leads` and `messages` tables.
+2. Run `supabase/005_lead_priority_flow.sql` after migration 004.
+3. Deploy the application only after migration 005 succeeds.
+4. Test an untouched lead, a contacted lead, an overdue follow-up, a replied/interested lead, and a blocked website.
+5. Confirm marking the same message sent twice does not create a second follow-up step.

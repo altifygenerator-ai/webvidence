@@ -16,17 +16,17 @@ export async function GET(req: Request) {
     await enforceRateLimit(req, user.id, RATE_LIMITS.export);
     const db = createAdminClient();
     const { data: leads, error } = await db.from('leads')
-      .select('name,category,address,city,state,postal_code,website,phone,rating,reviews,status,opportunity_score,last_audited_at,last_contacted_at,next_follow_up_at,notes')
+      .select('name,category,address,city,state,postal_code,website,phone,rating,reviews,status,opportunity_score,last_audited_at,first_contacted_at,last_contacted_at,next_follow_up_at,follow_up_step,lead_outcome,lead_outcome_updated_at,follow_up_stopped_at,notes')
       .eq('workspace_id', user.workspaceId)
       .order('opportunity_score', { ascending: false, nullsFirst: false })
       .limit(10000);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    const headers = ['Business','Category','Address','City','State','ZIP','Website','Phone','Rating','Reviews','Status','Opportunity score','Last audited','Last contacted','Next follow-up','Notes'];
+    const headers = ['Business','Category','Address','City','State','ZIP','Website','Phone','Rating','Reviews','Status','Opportunity score','Last audited','First contacted','Last contacted','Next follow-up','Follow-up step','Outcome','Outcome updated','Follow-up stopped','Notes'];
     const rows = (leads || []).map((lead) => [
       lead.name, lead.category, lead.address, lead.city, lead.state, lead.postal_code, lead.website, lead.phone,
-      lead.rating, lead.reviews, lead.status, lead.opportunity_score, lead.last_audited_at, lead.last_contacted_at,
-      lead.next_follow_up_at, lead.notes,
+      lead.rating, lead.reviews, lead.status, lead.opportunity_score, lead.last_audited_at, lead.first_contacted_at, lead.last_contacted_at,
+      lead.next_follow_up_at, lead.follow_up_step, lead.lead_outcome, lead.lead_outcome_updated_at, lead.follow_up_stopped_at, lead.notes,
     ]);
     const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
     const stamp = new Date().toISOString().slice(0, 10);

@@ -73,9 +73,22 @@ export async function saveLeadAudit(options: {
     if (findingsError) throw new Error(`Could not save audit findings: ${findingsError.message}`);
   }
 
-  const leadStatus = audit.status === 'failed'
+  const { data: currentLead, error: currentLeadError } = await db
+    .from('leads')
+    .select('status')
+    .eq('id', leadId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+  if (currentLeadError || !currentLead) throw new Error(`Could not load lead before saving score: ${currentLeadError?.message || 'Lead not found.'}`);
+
+  const scoredStatus = audit.status === 'failed'
     ? 'reviewing'
     : opportunityScore >= 70 ? 'ready_to_contact' : 'reviewing';
+  const leadStatus = ['new', 'reviewing', 'ready_to_contact'].includes(currentLead.status)
+    ? scoredStatus
+    : currentLead.status;
+  const accessIssue = audit.raw.accessIssue as { reason?: string } | null | undefined;
+  const manualReviewRequired = audit.raw.manualReviewRequired === true;
 
   const { error: leadError } = await db
     .from('leads')
@@ -83,6 +96,8 @@ export async function saveLeadAudit(options: {
       opportunity_score: opportunityScore,
       last_audited_at: new Date().toISOString(),
       status: leadStatus,
+      manual_review_required: manualReviewRequired,
+      manual_review_reason: manualReviewRequired ? (accessIssue?.reason || 'Open the website manually before using website-specific outreach.') : null,
     })
     .eq('id', leadId)
     .eq('workspace_id', workspaceId);

@@ -5,6 +5,7 @@ import { OutreachComposer } from '@/components/outreach-composer';
 import { LeadAnalysisButton } from '@/components/lead-analysis-button';
 import { requireViewer } from '@/lib/security/auth';
 import { createClient } from '@/lib/supabase/server';
+import { isManualReviewFinding, type LeadOutcome } from '@/lib/leads/priority';
 
 export default async function LeadFile({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireViewer();
@@ -13,7 +14,7 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
 
   const { data: lead } = await supabase
     .from('leads')
-    .select('id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,next_follow_up_at,last_contacted_at,last_audited_at')
+    .select('id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at')
     .eq('id', id)
     .maybeSingle();
   if (!lead) notFound();
@@ -37,6 +38,8 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const manualReviewFinding = (findings || []).find((finding) => isManualReviewFinding(finding.code));
 
   const { data: messages } = await supabase
     .from('messages')
@@ -74,6 +77,13 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
         {lead.google_maps_url ? <a className="btn" href={lead.google_maps_url} target="_blank" rel="noreferrer">Open Google listing</a> : null}
       </div>
 
+      {manualReviewFinding ? (
+        <div className="notice manual-review-notice">
+          <b>Manual website review needed</b><br />
+          {manualReviewFinding.evidence} Open the website yourself before mentioning a website problem in outreach.
+        </div>
+      ) : null}
+
       <section className="evidence-file-section">
         <div className="panel-heading">
           <div><div className="eyebrow">Verified site evidence</div><h3>{audit ? `${findings?.length || 0} findings from ${audit.pages_crawled} checked page${audit.pages_crawled === 1 ? '' : 's'}` : auditJob?.status === 'queued' || auditJob?.status === 'running' ? 'Website analysis is running' : 'No website analysis yet'}</h3></div>
@@ -103,6 +113,10 @@ export default async function LeadFile({ params }: { params: Promise<{ id: strin
         initialStatus={lead.status || 'new'}
         initialNotes={lead.notes || ''}
         initialFollowUpAt={toLocalInput(lead.next_follow_up_at)}
+        initialFirstContactedAt={lead.first_contacted_at || ''}
+        initialFollowUpStep={Number(lead.follow_up_step || 0)}
+        initialFollowUpStoppedAt={lead.follow_up_stopped_at || ''}
+        initialOutcome={(lead.lead_outcome || null) as LeadOutcome | null}
         initialMessages={(messages || []).map((message) => ({ ...message, subject: message.subject || null }))}
       />
     </AppShell>

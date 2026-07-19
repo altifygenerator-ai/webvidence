@@ -395,6 +395,7 @@ export default function Campaigns() {
                     <span><b>{lead.reviews}</b> reviews</span>
                     <span><b>{lead.phone || 'Not listed'}</b> phone</span>
                     <span className={lead.website ? '' : 'fact-alert'}><b>{lead.website ? 'Website found' : 'No website'}</b></span>
+                    {lead.audit?.findings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code)) ? <span className="fact-review"><b>Manual review needed</b></span> : null}
                   </div>
 
                   {lead.audit ? (
@@ -433,7 +434,7 @@ export default function Campaigns() {
                     </button>
                     {lead.website && <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a>}
                     {lead.googleMapsUrl && <a className="btn" href={lead.googleMapsUrl} target="_blank" rel="noreferrer">Google listing</a>}
-                    <Link className="btn outreach-link" href={`/dashboard/leads/${lead.id}`}>{lead.audit ? 'Create outreach' : 'Open lead file'}</Link>
+                    <Link className="btn outreach-link" href={`/dashboard/leads/${lead.id}`}>{lead.audit?.findings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code)) ? 'Open for manual review' : lead.audit ? 'Create outreach' : 'Open lead file'}</Link>
                   </div>
                 </div>
               </article>
