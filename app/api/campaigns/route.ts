@@ -138,6 +138,7 @@ export async function GET(req: Request) {
       googleMapsUrl: lead.google_maps_url,
       distanceMiles,
       opportunityScore: lead.opportunity_score,
+      status: lead.status,
       auditStatus,
       auditJobId: job?.id || null,
       auditError: job?.error_message || null,

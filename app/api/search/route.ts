@@ -32,6 +32,7 @@ type SavedLead = {
   googleMapsUrl: string | null;
   distanceMiles: number | null;
   opportunityScore: number | null;
+  status: string;
   audit: null | Record<string, unknown>;
   auditStatus?: 'queued' | 'running' | 'completed' | 'failed' | 'limit_reached' | 'already_queued';
   auditJobId?: string | null;
@@ -427,10 +428,11 @@ async function saveBusinesses(options: {
 
     let leadId: string;
     let opportunityScore: number | null = existing?.opportunity_score ?? null;
+    const status = existing?.status === 'archived' ? 'new' : (existing?.status || 'new');
     if (existing) {
       const { error } = await db.from('leads').update({
         ...record,
-        status: existing.status === 'archived' ? 'new' : existing.status,
+        status,
       }).eq('id', existing.id);
       if (error) throw new Error(`Could not update ${business.name}: ${error.message}`);
       leadId = existing.id;
@@ -456,6 +458,7 @@ async function saveBusinesses(options: {
       googleMapsUrl: business.googleMapsUrl,
       distanceMiles: business.distanceMiles,
       opportunityScore,
+      status,
       audit: null,
     });
   }

@@ -37,6 +37,7 @@ type Lead = {
   googleMapsUrl: string | null;
   distanceMiles: number | null;
   opportunityScore: number | null;
+  status?: string;
   audit: Audit | null;
   auditStatus?: 'queued' | 'running' | 'completed' | 'failed' | 'limit_reached';
   auditJobId?: string | null;
@@ -374,13 +375,16 @@ export default function Campaigns() {
           </div>
 
           <div className="prospect-list">
-            {leads.map((lead, index) => (
-              <article className="prospect-card" key={lead.id}>
+            {leads.map((lead, index) => {
+              const contacted = isContactedLead(lead.status);
+              return (
+              <article className={`prospect-card ${contacted ? 'prospect-contacted' : ''}`} key={lead.id}>
                 <div className="prospect-index">{String(index + 1).padStart(2, '0')}</div>
                 <div className="prospect-main">
                   <div className="prospect-titleline">
                     <div>
                       <small>{lead.category || 'Local business'} · {lead.distanceMiles ?? '?'} miles</small>
+                      {contacted ? <span className="contacted-badge">{formatLeadStatus(lead.status)}</span> : null}
                       <h3>{lead.name}</h3>
                       <p>{lead.address || [lead.city, lead.state].filter(Boolean).join(', ')}</p>
                     </div>
@@ -434,14 +438,23 @@ export default function Campaigns() {
                     </button>
                     {lead.website && <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a>}
                     {lead.googleMapsUrl && <a className="btn" href={lead.googleMapsUrl} target="_blank" rel="noreferrer">Google listing</a>}
-                    <Link className="btn outreach-link" href={`/dashboard/leads/${lead.id}`}>{lead.audit?.findings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code)) ? 'Open for manual review' : lead.audit ? 'Create outreach' : 'Open lead file'}</Link>
+                    <Link className="btn outreach-link" href={`/dashboard/leads/${lead.id}`}>{contacted ? 'Open contacted lead' : lead.audit?.findings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code)) ? 'Open for manual review' : lead.audit ? 'Create outreach' : 'Open lead file'}</Link>
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
     </AppShell>
   );
+}
+
+function isContactedLead(status: string | undefined) {
+  return ['contacted', 'replied', 'interested', 'follow_up', 'quote_sent', 'won', 'lost', 'not_interested', 'do_not_contact'].includes(status || '');
+}
+
+function formatLeadStatus(status: string | undefined) {
+  return String(status || 'contacted').replaceAll('_', ' ');
 }
