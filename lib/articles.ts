@@ -37,6 +37,27 @@ const ARTICLE_DIRECTORY = path.join(process.cwd(), 'content', 'articles');
 
 const articleDefinitions: ArticleDefinition[] = [
   {
+    slug: 'how-to-pitch-web-design-without-sounding-salesy',
+    title: 'How to Pitch Web Design Without Sounding Like a Salesperson',
+    metaTitle: 'How to Pitch Web Design Without Sounding Salesy',
+    description: 'Learn how to start real conversations with small business owners, write better first messages, and build an outreach profile that stays personal.',
+    excerpt: 'A plainspoken guide to starting conversations before pitching, writing first messages people will answer, and building an outreach profile that keeps the sales talk human.',
+    category: 'Outreach',
+    publishedAt: '2026-07-19',
+    updatedAt: '2026-07-19',
+    keywords: [
+      'web design outreach',
+      'how to pitch web design',
+      'web design cold message',
+      'freelance web design sales',
+      'small business outreach',
+      'web design pitch examples',
+      'outreach prompt for web designers',
+      'find web design clients',
+    ],
+    fileName: 'how-to-pitch-web-design-without-sounding-salesy.md',
+  },
+  {
     slug: 'how-to-find-businesses-that-actually-need-web-help',
     title: 'How to Find Businesses That Actually Need Web Help',
     metaTitle: 'How to Find Businesses That Need Websites',
