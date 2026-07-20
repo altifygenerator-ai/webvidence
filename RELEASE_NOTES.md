@@ -1,5 +1,15 @@
 # Webvidence Release Notes
 
+## Quiet onboarding and compact attention update
+
+- Replaced the always-open Today’s Work block with a compact, collapsible attention panel.
+- Added a work-led first-use path that advances from search to review, draft, and send based on real account activity rather than a forced tutorial.
+- Limited the open dashboard panel to the top three actions and kept the closed state useful with due and review counts.
+- Added a lightweight first-search hint, clearer placeholders, a 3-analysis starting default, and a collapsible result-mix explanation.
+- Added a useful empty Pipeline state and an optional outreach-style reminder for accounts without a saved profile.
+- Mobile starts with the attention panel collapsed to preserve vertical space.
+- No database migration is required.
+
 ## Lead priority and manual-review update
 
 - Added a dashboard Today’s Work queue and Pipeline attention badge.

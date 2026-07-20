@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { buildMailtoHref, buildSmsHref } from "@/lib/outreach/links";
 import {
@@ -29,6 +30,7 @@ type Props = {
   initialFollowUpStep: number;
   initialFollowUpStoppedAt: string;
   initialOutcome: LeadOutcome | null;
+  hasOutreachProfile: boolean;
   initialMessages: Message[];
 };
 
@@ -61,6 +63,7 @@ export function OutreachComposer({
   initialFollowUpStep,
   initialFollowUpStoppedAt,
   initialOutcome,
+  hasOutreachProfile,
   initialMessages,
 }: Props) {
   const [channel, setChannel] = useState<Channel>("facebook");
@@ -310,6 +313,15 @@ export function OutreachComposer({
           Webvidence never sends automatically. You review, edit, and decide
           when the business is contacted.
         </small>
+        {!hasOutreachProfile ? (
+          <div className="outreach-profile-tip">
+            <span>
+              Webvidence can draft a general message now. Add your services and
+              writing style when you want it to sound more like you.
+            </span>
+            <Link href="/dashboard/settings">Set my style</Link>
+          </div>
+        ) : null}
       </section>
 
       <section className="outreach-panel draft-panel">

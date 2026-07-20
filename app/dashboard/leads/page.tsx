@@ -219,13 +219,20 @@ export default async function Leads({
 
       {error && <div className="notice notice-error">{error.message}</div>}
       {!error && leads.length === 0 && (
-        <div className="notice">
-          {archived
-            ? "No archived prospects."
-            : filter === "all"
-              ? "No prospects are saved yet. Run a live search to build your first list."
-              : "No leads match this pipeline filter."}
-        </div>
+        archived || filter !== "all" ? (
+          <div className="notice">
+            {archived ? "No archived prospects." : "No leads match this pipeline filter."}
+          </div>
+        ) : (
+          <div className="pipeline-empty-state">
+            <div>
+              <div className="eyebrow">Nothing saved yet</div>
+              <h3>Businesses you keep will show up here.</h3>
+              <p>Run a search, look through the results, and keep the ones you may want to contact.</p>
+            </div>
+            <Link className="btn primary" href="/dashboard/campaigns">Find businesses</Link>
+          </div>
+        )
       )}
 
       {leads.length > 0 && <LeadsTable leads={leads} archived={archived} />}

@@ -55,12 +55,18 @@ export default async function LeadFile({
     isManualReviewFinding(finding.code),
   );
 
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("id,channel,subject,body,status,created_at")
-    .eq("lead_id", id)
-    .order("created_at", { ascending: false })
-    .limit(40);
+  const [{ data: messages }, outreachProfileResult] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id,channel,subject,body,status,created_at")
+      .eq("lead_id", id)
+      .order("created_at", { ascending: false })
+      .limit(40),
+    supabase
+      .from("outreach_profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", user.workspaceId),
+  ]);
 
   return (
     <AppShell admin={user.isAdmin}>
@@ -223,6 +229,7 @@ export default async function LeadFile({
         initialFollowUpStep={Number(lead.follow_up_step || 0)}
         initialFollowUpStoppedAt={lead.follow_up_stopped_at || ""}
         initialOutcome={(lead.lead_outcome || null) as LeadOutcome | null}
+        hasOutreachProfile={(outreachProfileResult.count || 0) > 0}
         initialMessages={(messages || []).map((message) => ({
           ...message,
           subject: message.subject || null,

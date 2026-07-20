@@ -298,15 +298,22 @@ export default function Campaigns() {
         </div>
       ) : null}
 
+      {usage?.usage.search === 0 ? (
+        <div className="search-first-tip">
+          <b>Good first search</b>
+          <span>Use one business type, one city, and start with 3 analyses.</span>
+        </div>
+      ) : null}
+
       <form className="search-form" onSubmit={run}>
         <label>
           <span>Business type</span>
-          <input className="input" name="category" placeholder="Roofers, plumbers, cabin rentals…" required />
+          <input className="input" name="category" placeholder="Roofers" required />
         </label>
         <fieldset className="location-field-group">
           <legend>Market location</legend>
           <div className="location-fields">
-            <input className="input" name="city" placeholder="City or postal code" autoComplete="address-level2" aria-label="City or postal code" required />
+            <input className="input" name="city" placeholder="Little Rock or 72201" autoComplete="address-level2" aria-label="City or postal code" required />
             <input className="input" name="region" placeholder="State / province" autoComplete="address-level1" aria-label="State or province" />
             <select className="input" name="countryCode" defaultValue="US" autoComplete="country" aria-label="Country" required>
               {COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
@@ -342,10 +349,10 @@ export default function Campaigns() {
         </label>
         <label>
           <span>Analyze now</span>
-          <select className="input" name="auditCount" defaultValue="5">
+          <select className="input" name="auditCount" defaultValue="3">
             <option value="0">Find only</option>
-            <option value="3">First 3</option>
-            <option value="5">First 5</option>
+            <option value="3">Start with 3</option>
+            <option value="5">Start with 5</option>
             <option value="10">First 10</option>
           </select>
         </label>
@@ -354,9 +361,12 @@ export default function Campaigns() {
         </button>
       </form>
 
-      <p className="search-help">
-        Mixed search checks several parts of the radius instead of only returning Google’s first batch. Hidden opportunities leans toward smaller listings, fewer reviews, and businesses without a website. Previous campaign results stay saved and are skipped when enough new matches are available.
-      </p>
+      <details className="search-help-disclosure">
+        <summary>How the result mixes work</summary>
+        <p>
+          Mixed search checks several parts of the radius instead of only returning Google’s first batch. Hidden opportunities leans toward smaller listings, fewer reviews, and businesses without a website. Previous campaign results stay saved and are skipped when enough new matches are available.
+        </p>
+      </details>
 
       {loading && <div className="search-progress" role="status" aria-live="polite"><span className="search-spinner"/><div><b>{loadingStage}</b><small>The business search should finish quickly. Website analyses continue in the background.</small></div></div>}
       {error && <div className="notice notice-error"><b>Could not finish.</b><br/>{error}<small className="error-help">Check the location spelling, Google API restrictions, plan usage, and server terminal for details.</small></div>}
@@ -371,7 +381,7 @@ export default function Campaigns() {
               <div className="eyebrow">Search results</div>
               <h3>{leads.length} {openedCampaign ? 'saved businesses' : 'businesses collected'}</h3>
             </div>
-            <small>{openedCampaign ? `Loaded from ${openedCampaign.category} in ${openedCampaign.location}. No search credit was used.` : 'Highest evidence scores indicate stronger website opportunities.'}</small>
+            <small>{openedCampaign ? `Loaded from ${openedCampaign.category} in ${openedCampaign.location}. No search credit was used.` : usage?.usage.search === 1 ? 'Start with two or three businesses. You do not need to work the whole list.' : 'Higher scores mean Webvidence found more reasons to take a closer look.'}</small>
           </div>
 
           <div className="prospect-list">
