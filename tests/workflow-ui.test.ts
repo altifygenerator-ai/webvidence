@@ -55,3 +55,19 @@ describe('contact history and pipeline controls', () => {
     expect(table).not.toContain('<span>Score</span>');
   });
 });
+
+
+describe('manual website review acknowledgement', () => {
+  it('lets the user clear the manual-review gate without changing audit evidence', () => {
+    const notice = source('components/manual-review-notice.tsx');
+    const leadRoute = source('app/api/leads/[id]/route.ts');
+    const generateRoute = source('app/api/generate/route.ts');
+
+    expect(notice).toContain('Mark as reviewed');
+    expect(notice).toContain('manualReviewCompleted: true');
+    expect(leadRoute).toContain('manualReviewCompleted: z.literal(true).optional()');
+    expect(leadRoute).toContain('update.manual_review_required = false');
+    expect(generateRoute).toContain('lead.manual_review_required === true');
+    expect(generateRoute).toContain('click “Mark as reviewed”');
+  });
+});

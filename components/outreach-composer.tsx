@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { buildMailtoHref, buildSmsHref } from "@/lib/outreach/links";
 import {
   LEAD_OUTCOME_LABELS,
@@ -86,6 +86,23 @@ export function OutreachComposer({
   const [textRecipient, setTextRecipient] = useState(leadPhone || "");
   const [emailRecipient, setEmailRecipient] = useState("");
 
+  useEffect(() => {
+    function handleManualReviewComplete() {
+      setError("");
+      setNotice("Manual review marked complete. You can generate outreach now.");
+    }
+
+    window.addEventListener(
+      "webvidence:manual-review-complete",
+      handleManualReviewComplete,
+    );
+    return () =>
+      window.removeEventListener(
+        "webvidence:manual-review-complete",
+        handleManualReviewComplete,
+      );
+  }, []);
+
   const selected = useMemo(
     () =>
       messages.find((item) => item.id === selectedId) || messages[0] || null,
@@ -120,7 +137,7 @@ export function OutreachComposer({
       setMessages((current) => [message, ...current]);
       setSelectedId(message.id);
       setNotice(
-        "Draft generated from the latest verified audit findings. Review it before sending.",
+        "Draft generated from the verified business details available. Review it before sending.",
       );
     } catch (generationError) {
       setError(

@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     const { data: lead, error: leadError } = await db
       .from('leads')
-      .select('id,name,category,city,state,website,status')
+      .select('id,name,category,city,state,website,status,manual_review_required')
       .eq('id', input.leadId)
       .eq('workspace_id', user.workspaceId)
       .single();
@@ -82,11 +82,11 @@ export async function POST(req: Request) {
         }] };
 
     const rawFindings = findings || [];
-    const manualReviewRequired = rawFindings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code));
+    const manualReviewRequired = lead.manual_review_required === true;
     const outreachFindings = rawFindings.filter((finding) => !NON_OUTREACH_FINDING_CODES.has(finding.code));
     if (input.channel !== 'follow_up' && manualReviewRequired && !outreachFindings.some((finding) => finding.severity !== 'positive')) {
       return NextResponse.json({
-        error: 'Webvidence could not fully inspect this website. Open it manually before creating website-specific outreach.',
+        error: 'This website needs a manual review. Open it, then click “Mark as reviewed” on the lead before generating outreach.',
       }, { status: 409 });
     }
 

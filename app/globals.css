@@ -7123,3 +7123,61 @@ button {
     grid-column: auto;
   }
 }
+
+/* Conversation-first outreach and manual-review acknowledgement */
+.manual-review-notice {
+  display: grid;
+  gap: 10px;
+}
+.manual-review-notice-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+}
+.manual-review-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.manual-review-copy p {
+  margin: 0;
+  color: #b7ae95;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.manual-review-action {
+  flex: 0 0 auto;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.manual-review-error {
+  color: #ffad9b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.manual-review-complete {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  border-left-color: var(--cyan);
+  color: #bdcbd1;
+}
+.manual-review-complete b {
+  color: #fff;
+}
+.manual-review-complete span {
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  .manual-review-notice-inner,
+  .manual-review-complete {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .manual-review-action {
+    width: 100%;
+    min-height: 48px;
+  }
+}

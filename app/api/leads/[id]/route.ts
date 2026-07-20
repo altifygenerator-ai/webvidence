@@ -16,6 +16,7 @@ const schema = z.object({
   notes: z.string().max(5000).nullable().optional(),
   nextFollowUpAt: z.string().datetime().nullable().optional(),
   leadOutcome: z.enum(LEAD_OUTCOMES).nullable().optional(),
+  manualReviewCompleted: z.literal(true).optional(),
 });
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -47,6 +48,11 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       if (input.nextFollowUpAt) update.follow_up_stopped_at = null;
     }
 
+    if (input.manualReviewCompleted) {
+      update.manual_review_required = false;
+      update.manual_review_reason = null;
+    }
+
     if (input.status === 'contacted' && !current.last_contacted_at) {
       if (!current.first_contacted_at) update.first_contacted_at = changedAt;
       update.last_contacted_at = changedAt;
@@ -64,7 +70,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       .update(update)
       .eq('id', id)
       .eq('workspace_id', user.workspaceId)
-      .select('id,status,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,lead_outcome_updated_at,follow_up_step,follow_up_stopped_at')
+      .select('id,status,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,lead_outcome_updated_at,follow_up_step,follow_up_stopped_at,manual_review_required,manual_review_reason')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ lead: data });

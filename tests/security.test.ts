@@ -203,7 +203,7 @@ describe('lead-priority upgrade guards', () => {
     const generate = source('app/api/generate/route.ts');
     expect(generate).toContain("'automated_check_blocked'");
     expect(generate).toContain('NON_OUTREACH_FINDING_CODES');
-    expect(generate).toContain('Open it manually before creating website-specific outreach');
+    expect(generate).toContain('click “Mark as reviewed”');
     expect(generate.indexOf('await consumeMessage(user)')).toBeGreaterThan(generate.indexOf('manualReviewRequired'));
   });
 

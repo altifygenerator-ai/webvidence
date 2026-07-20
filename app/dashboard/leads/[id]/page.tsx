@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { OutreachComposer } from "@/components/outreach-composer";
+import { ManualReviewNotice } from "@/components/manual-review-notice";
 import { LeadAnalysisButton } from "@/components/lead-analysis-button";
 import { requireViewer } from "@/lib/security/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +20,7 @@ export default async function LeadFile({
   const { data: lead } = await supabase
     .from("leads")
     .select(
-      "id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at",
+      "id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
     )
     .eq("id", id)
     .maybeSingle();
@@ -138,13 +139,15 @@ export default async function LeadFile({
         ) : null}
       </div>
 
-      {manualReviewFinding ? (
-        <div className="notice manual-review-notice">
-          <b>Manual website review needed</b>
-          <br />
-          {manualReviewFinding.evidence} Open the website yourself before
-          mentioning a website problem in outreach.
-        </div>
+      {lead.manual_review_required ? (
+        <ManualReviewNotice
+          leadId={lead.id}
+          reason={
+            lead.manual_review_reason ||
+            manualReviewFinding?.evidence ||
+            "Webvidence could not fully inspect this website."
+          }
+        />
       ) : null}
 
       <section className="evidence-file-section">
