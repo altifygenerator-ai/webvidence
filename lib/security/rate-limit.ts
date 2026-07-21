@@ -64,6 +64,11 @@ export const RATE_LIMITS = {
     user: { limit: 30, windowSeconds: 600 },
     ip: { limit: 60, windowSeconds: 600 },
   },
+  feedback: {
+    route: 'feedback_submit',
+    user: { limit: 4, windowSeconds: 3600 },
+    ip: { limit: 8, windowSeconds: 3600 },
+  },
 } satisfies Record<string, RateLimitPolicy>;
 
 export async function enforceRateLimit(req: Request, userId: string, policy: RateLimitPolicy) {

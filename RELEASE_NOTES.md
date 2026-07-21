@@ -1,31 +1,5 @@
 # Webvidence Release Notes
 
-## Smart recommendations and outreach momentum update
-
-- Added a compact **Best places to start** block above search results that ranks up to three analyzed, contactable, uncontacted businesses.
-- Separated contact recommendation from the evidence score so blocked, incomplete, already-contacted, or hard-to-reach leads are not pushed to the top.
-- Translated recommendation reasons into normal business-owner language instead of technical audit terms.
-- Added a quiet daily outreach batch, a shrinking remaining count, a good stopping point, and an optional **Add 3 more** action stored only in the current browser session.
-- Added a return-from-email/text confirmation sheet so one tap records the send, contact date, and existing follow-up schedule accurately.
-- Added a next-recommended-lead handoff across the first three recommendations.
-- Remembered the user’s preferred outreach channel in the browser.
-- Added one-tap Replied, Interested, Not a fit, and Won actions while moving detailed pipeline fields and notes into a collapsible section.
-- Simplified the first search form to business type and location, with the existing radius, result mix, count, country, and analysis settings under **Search options**.
-- Collapsed full audit findings behind a detail control while keeping one plain-language finding visible on each result.
-- Tightened the mobile header and bottom navigation, added a single thumb-reachable outreach action, and changed the send confirmation into a mobile bottom sheet.
-- Hid empty dashboard metrics until a first search exists and limited provider-unit reporting to administrators.
-- No Supabase migration is required. All progress and recommendation behavior uses existing leads, messages, audits, contact dates, and sent timestamps.
-
-## Quiet onboarding and compact attention update
-
-- Replaced the always-open Today’s Work block with a compact, collapsible attention panel.
-- Added a work-led first-use path that advances from search to review, draft, and send based on real account activity rather than a forced tutorial.
-- Limited the open dashboard panel to the top three actions and kept the closed state useful with due and review counts.
-- Added a lightweight first-search hint, clearer placeholders, a 3-analysis starting default, and a collapsible result-mix explanation.
-- Added a useful empty Pipeline state and an optional outreach-style reminder for accounts without a saved profile.
-- Mobile starts with the attention panel collapsed to preserve vertical space.
-- No database migration is required.
-
 ## Lead priority and manual-review update
 
 - Added a dashboard Today’s Work queue and Pipeline attention badge.
@@ -106,11 +80,11 @@ Existing projects must run `supabase/004_functionality_upgrade.sql`. Projects th
 - Increased touch targets and input sizing to reduce missed taps and prevent iPhone form zoom.
 - Added safe-area spacing for modern iPhone navigation areas and removed horizontal page overflow.
 
-## Conversation-first outreach landing page
+## Feedback and outcome check-in
 
-- Added `/conversation-first-outreach` as a focused service landing page inside Webvidence.
-- Positioned a five-spot, $149 founding beta for a custom outreach audit and setup.
-- Added honest problem/method/fit sections, a Webvidence workflow connection, FAQ schema, and service schema.
-- Added a no-database application form that opens a prefilled email for user review.
-- Added the page to the public sitemap and footer navigation.
-- Added responsive layouts for desktop, tablet, and mobile.
+- Added a public `/feedback` form with workflow, outreach-result, and product-usage questions.
+- Added an open text area for users to describe Webvidence in their own words.
+- Added precise permission controls for private feedback, anonymous quotes, first-name attribution, business attribution, outcome details, light editing, and combined statistics.
+- Added a server-only feedback endpoint with validation, rate limiting, same-origin checks, a honeypot, Supabase storage, and Resend email notification.
+- Added `supabase/006_feedback_submissions.sql` and feedback email environment variables.
+- Linked the form from the public footer and signed-in workspace menu.

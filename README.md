@@ -18,6 +18,7 @@ Webvidence is a local prospecting and website-analysis SaaS for freelance web de
 - Stripe checkout, upgrades, Customer Portal, signed webhooks, and server-side paid-plan enforcement
 - Admin usage reporting for Google Geocoding, Places, PageSpeed, and OpenAI token usage with configurable cost estimates
 - Production Terms and Privacy pages with a configurable support email
+- Feedback page with workflow outcomes, testimonial permission, private Supabase storage, and email notifications
 
 ## 1. Environment
 
@@ -35,6 +36,8 @@ The same restricted Google key can be used for Places, Geocoding, and PageSpeed.
 
 Set `NEXT_PUBLIC_SUPPORT_EMAIL` to an inbox you actually monitor before launch.
 
+For `/feedback`, add `RESEND_API_KEY`, `FEEDBACK_TO_EMAIL`, and `FEEDBACK_FROM_EMAIL`. The from-address domain must be configured with your email provider. The form still stores a response if an email notification cannot be delivered.
+
 The admin cost report uses list-price estimates configured in environment variables. Google free tiers, provider credits, model changes, and final invoices can make the real charge different.
 
 ## 2. Supabase migrations
@@ -49,14 +52,15 @@ Run these missing migrations in order, skipping any one you already successfully
 2. `supabase/003_secret_key_rpc_fix.sql`
 3. `supabase/004_functionality_upgrade.sql`
 4. `supabase/005_lead_priority_flow.sql`
+5. `supabase/006_feedback_submissions.sql`
 
-For a current live project that already has migrations 003 and 004, run only:
+For a current live project that already has migrations 003, 004, and 005, run only:
 
 ```text
-supabase/005_lead_priority_flow.sql
+supabase/006_feedback_submissions.sql
 ```
 
-Migrations 004 and 005 are additive and preserve accounts, subscriptions, searches, leads, audits, messages, and usage. Back up `leads` and `messages` before applying any production migration.
+Migrations 004, 005, and 006 are additive and preserve accounts, subscriptions, searches, leads, audits, messages, and usage. Back up `leads` and `messages` before applying any production migration.
 
 ### Brand-new Supabase project
 
@@ -67,6 +71,7 @@ Run all migrations in order:
 3. `003_secret_key_rpc_fix.sql`
 4. `004_functionality_upgrade.sql`
 5. `005_lead_priority_flow.sql`
+6. `006_feedback_submissions.sql`
 
 Configure Supabase Authentication URLs:
 
@@ -104,6 +109,7 @@ npm run dev
 8. Test Forgot password and Resend confirmation.
 9. Generate all four outreach types and verify usage and estimated cost logs.
 10. Complete a Stripe purchase, upgrade, cancellation, and failed-payment test.
+11. Submit `/feedback`, confirm the row is saved, verify the notification email, and confirm private permission clears all marketing-use flags.
 
 ## Verification commands
 
