@@ -9,6 +9,10 @@ import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/ra
 import { acquireOperationLock, releaseOperationLock, type OperationLock } from '@/lib/security/operation-lock';
 import { logApiUsage } from '@/lib/data/api-usage';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 const NON_OUTREACH_FINDING_CODES = new Set([
   'automated_check_blocked',
   'website_unreachable',
@@ -47,11 +51,23 @@ export async function POST(req: Request) {
 
     const { data: lead, error: leadError } = await db
       .from('leads')
-      .select('id,name,category,city,state,website,status,manual_review_required')
+      .select('id,workspace_id,name,category,city,state,website,status,manual_review_required')
       .eq('id', input.leadId)
       .eq('workspace_id', user.workspaceId)
-      .single();
-    if (leadError || !lead) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
+      .maybeSingle();
+    if (leadError) {
+      return NextResponse.json({ error: `Lead could not be loaded: ${leadError.message}` }, { status: 400 });
+    }
+    if (!lead) {
+      const { data: existingLead } = user.isAdmin
+        ? await db.from('leads').select('id').eq('id', input.leadId).maybeSingle()
+        : { data: null };
+      return NextResponse.json({
+        error: existingLead
+          ? 'That business belongs to a different workspace. Return to your pipeline and open a lead from this account.'
+          : 'This business is no longer available. Return to your pipeline and open it again.',
+      }, { status: existingLead ? 403 : 404 });
+    }
 
     if (lead.status === 'do_not_contact') {
       return NextResponse.json({ error: 'This business is marked do not contact.' }, { status: 409 });

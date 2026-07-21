@@ -29,6 +29,7 @@ export default async function LeadFile({
       "id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
     )
     .eq("id", id)
+    .eq("workspace_id", user.workspaceId)
     .maybeSingle();
   if (!lead) notFound();
 
@@ -38,6 +39,7 @@ export default async function LeadFile({
       "id,status,score,website_url,final_url,http_status,page_title,meta_description,pages_crawled,performance_score,accessibility_score,seo_score,best_practices_score,created_at",
     )
     .eq("lead_id", id)
+    .eq("workspace_id", user.workspaceId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -53,6 +55,7 @@ export default async function LeadFile({
     .from("audit_jobs")
     .select("id,status,result_status,error_message,attempts,updated_at")
     .eq("lead_id", id)
+    .eq("workspace_id", user.workspaceId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -66,6 +69,7 @@ export default async function LeadFile({
         .from("leads")
         .select("id,name,status,manual_review_required")
         .eq("id", nextLeadId)
+        .eq("workspace_id", user.workspaceId)
         .maybeSingle()
     : { data: null };
   const nextLead = nextLeadResult.data &&
@@ -79,6 +83,7 @@ export default async function LeadFile({
       .from("messages")
       .select("id,channel,subject,body,status,created_at")
       .eq("lead_id", id)
+      .eq("workspace_id", user.workspaceId)
       .order("created_at", { ascending: false })
       .limit(40),
     supabase
@@ -239,6 +244,7 @@ export default async function LeadFile({
       </section>
 
       <OutreachComposer
+        key={lead.id}
         leadId={lead.id}
         leadName={lead.name}
         leadPhone={lead.phone || null}

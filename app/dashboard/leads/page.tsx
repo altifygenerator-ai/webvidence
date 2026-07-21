@@ -92,6 +92,7 @@ export default async function Leads({
     .select(
       "id,name,city,state,website,status,opportunity_score,reviews,rating,last_audited_at,created_at,updated_at,first_contacted_at,last_contacted_at,next_follow_up_at,follow_up_step,follow_up_stopped_at,lead_outcome,manual_review_required,manual_review_reason",
     )
+    .eq("workspace_id", user.workspaceId)
     .limit(500);
   query = archived
     ? query.eq("status", "archived")
@@ -103,6 +104,7 @@ export default async function Leads({
     supabase
       .from("leads")
       .select("id", { count: "exact", head: true })
+      .eq("workspace_id", user.workspaceId)
       .neq("status", "archived"),
   ]);
 

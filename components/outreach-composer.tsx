@@ -222,7 +222,12 @@ export function OutreachComposer({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ leadId, channel }),
       });
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : { error: response.status === 404
+            ? "The outreach endpoint was not included in this deployment. Redeploy the complete updated project."
+            : `Could not generate outreach (${response.status}).` };
       if (!response.ok)
         throw new Error(data.error || "Could not generate outreach.");
       const message = data.message as Message;

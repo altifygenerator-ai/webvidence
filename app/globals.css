@@ -1707,10 +1707,11 @@ button {
 }
 .pipeline-panel {
   grid-column: 1;
+  grid-row: 3;
 }
 .draft-panel {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 2 / span 2;
 }
 .outreach-notice {
   grid-column: 1 / -1;
