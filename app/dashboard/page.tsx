@@ -132,8 +132,9 @@ export default async function Dashboard() {
   const sentMessages = messages.filter(
     (message) => message.status === "sent" && message.direction !== "inbound",
   );
+  const searchCount = searchHistoryResult.count || 0;
   const onboardingStage = getOnboardingStage({
-    searches: searchHistoryResult.count || 0,
+    searches: searchCount,
     audits: auditHistoryResult.count || 0,
     messages: messages.length,
     sentMessages: sentMessages.length,
@@ -243,6 +244,8 @@ export default async function Dashboard() {
         }
       />
 
+      {searchCount > 0 ? (
+        <>
       <div className="grid dashboard-metrics">
         <div className="card">
           <div className="muted">Ready to review</div>
@@ -296,17 +299,21 @@ export default async function Dashboard() {
             <b>{messages.length}</b>
             <small>Draft, approved, and sent history</small>
           </div>
-          <div>
-            <span>Logged provider units</span>
-            <b>{apiUnits}</b>
-            <small>
-              {estimatedCost > 0
-                ? `$${estimatedCost.toFixed(2)} estimated`
-                : "Usage is recorded for cost review"}
-            </small>
-          </div>
+          {user.isAdmin ? (
+            <div>
+              <span>Logged provider units</span>
+              <b>{apiUnits}</b>
+              <small>
+                {estimatedCost > 0
+                  ? `$${estimatedCost.toFixed(2)} estimated`
+                  : "Usage is recorded for cost review"}
+              </small>
+            </div>
+          ) : null}
         </div>
       </section>
+        </>
+      ) : null}
     </AppShell>
   );
 }

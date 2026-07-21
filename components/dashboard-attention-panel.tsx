@@ -56,7 +56,11 @@ export function DashboardAttentionPanel({
       const mobile = window.matchMedia("(max-width: 760px)").matches;
       const storageKey = `webvidence:attention-panel:${stage}`;
       const saved = window.sessionStorage.getItem(storageKey);
-      setOpen(mobile ? false : saved === null ? initiallyOpen : saved === "open");
+      if (saved !== null) {
+        setOpen(saved === "open");
+        return;
+      }
+      setOpen(mobile ? stage === "first_search" : initiallyOpen);
     });
 
     return () => window.cancelAnimationFrame(frame);

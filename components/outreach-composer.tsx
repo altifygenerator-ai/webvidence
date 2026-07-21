@@ -20,9 +20,17 @@ type Message = {
   created_at: string;
 };
 
+type MomentumSummary = {
+  sentToday: number;
+  sentThisWeek: number;
+};
+
 type Props = {
   leadId: string;
+  leadName: string;
   leadPhone: string | null;
+  nextLeadHref?: string | null;
+  nextLeadName?: string | null;
   initialStatus: string;
   initialNotes: string;
   initialFollowUpAt: string;
@@ -53,9 +61,14 @@ const channels: Array<{ id: Channel; label: string; note: string }> = [
   },
 ];
 
+const preferredChannelKey = "webvidence:preferred-outreach-channel";
+
 export function OutreachComposer({
   leadId,
+  leadName,
   leadPhone,
+  nextLeadHref = null,
+  nextLeadName = null,
   initialStatus,
   initialNotes,
   initialFollowUpAt,
@@ -66,7 +79,12 @@ export function OutreachComposer({
   hasOutreachProfile,
   initialMessages,
 }: Props) {
-  const [channel, setChannel] = useState<Channel>("facebook");
+  const [channel, setChannel] = useState<Channel>(() => {
+    if (typeof window === "undefined") return "facebook";
+    const saved = window.localStorage.getItem(preferredChannelKey) as Channel | null;
+    if (!saved || !channels.some((item) => item.id === saved)) return "facebook";
+    return saved === "text" && !leadPhone ? "facebook" : saved;
+  });
   const [messages, setMessages] = useState(initialMessages);
   const [selectedId, setSelectedId] = useState(initialMessages[0]?.id || "");
   const [loading, setLoading] = useState(false);
@@ -88,6 +106,29 @@ export function OutreachComposer({
   );
   const [textRecipient, setTextRecipient] = useState(leadPhone || "");
   const [emailRecipient, setEmailRecipient] = useState("");
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
+  const [momentum, setMomentum] = useState<MomentumSummary>({
+    sentToday: 0,
+    sentThisWeek: 0,
+  });
+  const [dailyTarget, setDailyTarget] = useState(() => {
+    if (typeof window === "undefined") return 5;
+    const saved = Number(
+      window.sessionStorage.getItem("webvidence:daily-outreach-target") || 5,
+    );
+    return Number.isFinite(saved) ? Math.max(5, saved) : 5;
+  });
+
+  const selected = useMemo(
+    () =>
+      messages.find((item) => item.id === selectedId) || messages[0] || null,
+    [messages, selectedId],
+  );
+  const pendingDeliveryKey = `webvidence:pending-delivery:${leadId}`;
+
+  useEffect(() => {
+    void refreshMomentum();
+  }, []);
 
   useEffect(() => {
     function handleManualReviewComplete() {
@@ -106,11 +147,23 @@ export function OutreachComposer({
       );
   }, []);
 
-  const selected = useMemo(
-    () =>
-      messages.find((item) => item.id === selectedId) || messages[0] || null,
-    [messages, selectedId],
-  );
+  useEffect(() => {
+    function checkPendingDelivery() {
+      if (document.visibilityState !== "visible" || !selected) return;
+      const pendingMessageId = window.sessionStorage.getItem(pendingDeliveryKey);
+      if (pendingMessageId === selected.id && selected.status !== "sent") {
+        window.setTimeout(() => setShowSendConfirm(true), 250);
+      }
+    }
+
+    window.addEventListener("focus", checkPendingDelivery);
+    document.addEventListener("visibilitychange", checkPendingDelivery);
+    return () => {
+      window.removeEventListener("focus", checkPendingDelivery);
+      document.removeEventListener("visibilitychange", checkPendingDelivery);
+    };
+  }, [pendingDeliveryKey, selected]);
+
   const sequenceLabel = getSequenceLabel({
     firstContactedAt,
     followUpAt,
@@ -122,6 +175,42 @@ export function OutreachComposer({
     selected?.channel === "email"
       ? buildMailtoHref(emailRecipient, selected.subject || "", selected.body)
       : "";
+  const targetComplete = momentum.sentToday >= dailyTarget;
+  const remaining = Math.max(0, dailyTarget - momentum.sentToday);
+
+  function chooseChannel(next: Channel) {
+    setChannel(next);
+    window.localStorage.setItem(preferredChannelKey, next);
+  }
+
+  async function refreshMomentum() {
+    const offset = new Date().getTimezoneOffset();
+    const response = await fetch(
+      `/api/outreach-momentum?tzOffset=${offset}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    const sentToday = Number(data.sentToday || 0);
+    setMomentum({
+      sentToday,
+      sentThisWeek: Number(data.sentThisWeek || 0),
+    });
+    setDailyTarget((current) =>
+      Math.max(current, Math.ceil(Math.max(1, sentToday) / 5) * 5),
+    );
+  }
+
+  function addThreeMore() {
+    setDailyTarget((current) => {
+      const next = Math.max(current, momentum.sentToday) + 3;
+      window.sessionStorage.setItem(
+        "webvidence:daily-outreach-target",
+        String(next),
+      );
+      return next;
+    });
+  }
 
   async function generate() {
     setLoading(true);
@@ -154,7 +243,7 @@ export function OutreachComposer({
   }
 
   async function updateMessage(patch: Partial<Message>) {
-    if (!selected) return;
+    if (!selected) return false;
     setSaving(true);
     setError("");
     try {
@@ -188,15 +277,20 @@ export function OutreachComposer({
         setNotice(
           `Marked as sent and saved to the lead history.${scheduling}${data.warning ? ` ${data.warning}` : ""}`,
         );
+        window.sessionStorage.removeItem(pendingDeliveryKey);
+        setShowSendConfirm(false);
+        await refreshMomentum();
       } else {
         setNotice("Draft saved.");
       }
+      return true;
     } catch (saveError) {
       setError(
         saveError instanceof Error
           ? saveError.message
           : "Could not save message.",
       );
+      return false;
     } finally {
       setSaving(false);
     }
@@ -222,13 +316,8 @@ export function OutreachComposer({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not update lead.");
-      setStatus(data.lead.status || status);
-      setFollowUpAt(toLocalInput(data.lead.next_follow_up_at));
-      setFirstContactedAt(data.lead.first_contacted_at || firstContactedAt);
-      setFollowUpStep(Number(data.lead.follow_up_step || 0));
-      setFollowUpStoppedAt(data.lead.follow_up_stopped_at || "");
-      setOutcome(data.lead.lead_outcome || "");
-      setNotice("Pipeline status, outcome, follow-up, and notes saved.");
+      applyLeadState(data.lead);
+      setNotice("Lead tracking and notes saved.");
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -240,13 +329,70 @@ export function OutreachComposer({
     }
   }
 
+  async function recordQuickOutcome(
+    quickStatus: string,
+    quickOutcome?: LeadOutcome,
+  ) {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: quickStatus,
+          ...(quickOutcome ? { leadOutcome: quickOutcome } : {}),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not update lead.");
+      applyLeadState(data.lead);
+      setNotice(
+        quickOutcome
+          ? `${LEAD_OUTCOME_LABELS[quickOutcome]} recorded. Follow-up reminders were updated automatically.`
+          : "Marked as not a fit. It will no longer appear in the daily queue.",
+      );
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not update lead.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function applyLeadState(lead: Record<string, unknown>) {
+    setStatus(String(lead.status || status));
+    setFollowUpAt(toLocalInput(lead.next_follow_up_at as string | null));
+    setFirstContactedAt(
+      String(lead.first_contacted_at || firstContactedAt || ""),
+    );
+    setFollowUpStep(Number(lead.follow_up_step || 0));
+    setFollowUpStoppedAt(String(lead.follow_up_stopped_at || ""));
+    setOutcome((lead.lead_outcome as LeadOutcome | null) || "");
+  }
+
+  function beginExternalDelivery() {
+    if (!selected || selected.status === "sent") return;
+    window.sessionStorage.setItem(pendingDeliveryKey, selected.id);
+  }
+
+  function dismissSendConfirm() {
+    window.sessionStorage.removeItem(pendingDeliveryKey);
+    setShowSendConfirm(false);
+  }
+
   async function copyMessage() {
     if (!selected) return;
     const content = [selected.subject, selected.body]
       .filter(Boolean)
       .join("\n\n");
     await navigator.clipboard.writeText(content);
-    setNotice("Copied to clipboard.");
+    beginExternalDelivery();
+    setNotice("Copied. When you have sent it, confirm below so the follow-up stays accurate.");
+    setShowSendConfirm(true);
   }
 
   function openTextApp() {
@@ -256,22 +402,56 @@ export function OutreachComposer({
       /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.userAgent.includes("Macintosh") &&
         navigator.maxTouchPoints > 1);
-    const smsHref = buildSmsHref(
-      textRecipient,
-      selected.body,
-      isAppleMobile,
-    );
+    const smsHref = buildSmsHref(textRecipient, selected.body, isAppleMobile);
     if (!smsHref) {
       setError(
         "Add a valid business phone number before opening the text app.",
       );
       return;
     }
+    beginExternalDelivery();
     window.location.href = smsHref;
   }
 
+  const mobilePrimaryAction = !selected ? (
+    <button className="btn primary" type="button" onClick={generate} disabled={loading}>
+      {loading ? "Building draft…" : "Generate message"}
+    </button>
+  ) : selected.status === "sent" && nextLeadHref ? (
+    <Link className="btn primary" href={nextLeadHref}>
+      Review next lead
+    </Link>
+  ) : selected.channel === "email" ? (
+    <a
+      className="btn primary"
+      href={emailHref}
+      onClick={beginExternalDelivery}
+    >
+      Open email app
+    </a>
+  ) : selected.channel === "text" ? (
+    <button className="btn primary" type="button" onClick={openTextApp}>
+      Open text app
+    </button>
+  ) : (
+    <button className="btn primary" type="button" onClick={copyMessage}>
+      Copy message
+    </button>
+  );
+
   return (
     <div className="outreach-layout" id="outreach">
+      <div className="outreach-momentum-strip">
+        <span>
+          <b>{momentum.sentToday} of {dailyTarget}</b> contacted today
+        </span>
+        <span>
+          {targetComplete
+            ? "Good stopping point"
+            : `${remaining} left in this batch`}
+        </span>
+      </div>
+
       <section className="outreach-panel">
         <div className="panel-heading">
           <div>
@@ -288,7 +468,7 @@ export function OutreachComposer({
               }
               key={item.id}
               type="button"
-              onClick={() => setChannel(item.id)}
+              onClick={() => chooseChannel(item.id)}
             >
               <b>{item.label}</b>
               <small>{item.note}</small>
@@ -427,7 +607,11 @@ export function OutreachComposer({
                 Copy message
               </button>
               {selected.channel === "email" ? (
-                <a className="btn delivery-button" href={emailHref}>
+                <a
+                  className="btn delivery-button"
+                  href={emailHref}
+                  onClick={beginExternalDelivery}
+                >
                   Open email app
                 </a>
               ) : null}
@@ -452,7 +636,7 @@ export function OutreachComposer({
                 }
                 disabled={saving || selected.status === "sent"}
               >
-                {selected.status === "sent" ? "Already sent" : "Mark sent"}
+                {selected.status === "sent" ? "Already sent" : "Mark sent now"}
               </button>
             </div>
             {selected.channel === "email" || selected.channel === "text" ? (
@@ -461,6 +645,34 @@ export function OutreachComposer({
                 send it or mark it sent automatically.
               </small>
             ) : null}
+
+            {selected.status === "sent" ? (
+              <div className="sent-next-card">
+                <div>
+                  <span className="sent-check">Sent ✓</span>
+                  <b>{momentum.sentToday} contacted today</b>
+                  <small>
+                    {nextLeadName
+                      ? `Next recommended: ${nextLeadName}`
+                      : "The contact date and follow-up were saved automatically."}
+                  </small>
+                </div>
+                {nextLeadHref ? (
+                  <Link className="btn primary" href={nextLeadHref}>
+                    Review next lead
+                  </Link>
+                ) : targetComplete ? (
+                  <button className="btn" type="button" onClick={addThreeMore}>
+                    Add 3 more
+                  </button>
+                ) : (
+                  <Link className="btn" href="/dashboard/campaigns">
+                    Back to results
+                  </Link>
+                )}
+              </div>
+            ) : null}
+
             {messages.length > 1 ? (
               <label>
                 <span>Saved drafts and history</span>
@@ -491,91 +703,186 @@ export function OutreachComposer({
         <div className="panel-heading">
           <div>
             <div className="eyebrow">Next action</div>
-            <h3>Work the lead</h3>
+            <h3>Keep the lead moving</h3>
           </div>
         </div>
         <div className="follow-up-state">
           <b>{sequenceLabel.title}</b>
           <span>{sequenceLabel.detail}</span>
         </div>
-        <label>
-          <span>Pipeline status</span>
-          <select
-            className="input outreach-input"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
-            {[
-              "new",
-              "reviewing",
-              "ready_to_contact",
-              "contacted",
-              "replied",
-              "interested",
-              "follow_up",
-              "quote_sent",
-              "won",
-              "lost",
-              "not_interested",
-              "do_not_contact",
-              "archived",
-            ].map((value) => (
-              <option key={value} value={value}>
-                {value.replaceAll("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>What happened?</span>
-          <select
-            className="input outreach-input"
-            value={outcome}
-            onChange={(event) =>
-              setOutcome(event.target.value as LeadOutcome | "")
-            }
-          >
-            <option value="">No outcome recorded</option>
-            {LEAD_OUTCOMES.map((value) => (
-              <option key={value} value={value}>
-                {LEAD_OUTCOME_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Follow-up date</span>
-          <input
-            className="input outreach-input"
-            type="datetime-local"
-            value={followUpAt}
-            onChange={(event) => setFollowUpAt(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>Private notes</span>
-          <textarea
-            className="input outreach-notes"
-            rows={5}
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="What they said, what to offer, when to follow up…"
-          />
-        </label>
-        <button
-          className="btn primary"
-          type="button"
-          onClick={saveLead}
-          disabled={saving}
-        >
-          {saving ? "Saving…" : "Save lead activity"}
-        </button>
+
+        {firstContactedAt ? (
+          <div className="quick-outcomes" aria-label="Quick lead outcomes">
+            <button
+              type="button"
+              onClick={() => void recordQuickOutcome("replied", "replied")}
+              disabled={saving}
+            >
+              Replied
+            </button>
+            <button
+              type="button"
+              onClick={() => void recordQuickOutcome("interested", "interested")}
+              disabled={saving}
+            >
+              Interested
+            </button>
+            <button
+              type="button"
+              onClick={() => void recordQuickOutcome("not_interested")}
+              disabled={saving}
+            >
+              Not a fit
+            </button>
+            <button
+              type="button"
+              onClick={() => void recordQuickOutcome("won", "closed_won")}
+              disabled={saving}
+            >
+              Won
+            </button>
+          </div>
+        ) : null}
+
+        <details className="lead-tracking-details">
+          <summary>Lead tracking and notes</summary>
+          <div className="lead-tracking-fields">
+            <label>
+              <span>Pipeline status</span>
+              <select
+                className="input outreach-input"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
+                {[
+                  "new",
+                  "reviewing",
+                  "ready_to_contact",
+                  "contacted",
+                  "replied",
+                  "interested",
+                  "follow_up",
+                  "quote_sent",
+                  "won",
+                  "lost",
+                  "not_interested",
+                  "do_not_contact",
+                  "archived",
+                ].map((value) => (
+                  <option key={value} value={value}>
+                    {value.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>What happened?</span>
+              <select
+                className="input outreach-input"
+                value={outcome}
+                onChange={(event) =>
+                  setOutcome(event.target.value as LeadOutcome | "")
+                }
+              >
+                <option value="">No outcome recorded</option>
+                {LEAD_OUTCOMES.map((value) => (
+                  <option key={value} value={value}>
+                    {LEAD_OUTCOME_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Follow-up date</span>
+              <input
+                className="input outreach-input"
+                type="datetime-local"
+                value={followUpAt}
+                onChange={(event) => setFollowUpAt(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Private notes</span>
+              <textarea
+                className="input outreach-notes"
+                rows={5}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="What they said, what to offer, when to follow up…"
+              />
+            </label>
+            <button
+              className="btn primary"
+              type="button"
+              onClick={saveLead}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save lead activity"}
+            </button>
+          </div>
+        </details>
       </section>
 
       {error ? (
         <div className="notice notice-error outreach-notice">{error}</div>
       ) : null}
       {notice ? <div className="notice outreach-notice">{notice}</div> : null}
+
+      <div className="mobile-outreach-dock" aria-label="Current outreach action">
+        <div>
+          <small>{selected ? leadName : "Next step"}</small>
+          <span>
+            {selected?.status === "sent"
+              ? nextLeadName || "Outreach saved"
+              : selected
+                ? `Send by ${selected.channel.replaceAll("_", " ")}`
+                : "Create the first message"}
+          </span>
+        </div>
+        {mobilePrimaryAction}
+      </div>
+      <div className="mobile-outreach-dock-spacer" aria-hidden="true" />
+
+      {showSendConfirm && selected && selected.status !== "sent" ? (
+        <div className="send-confirm-layer" role="presentation">
+          <section
+            className="send-confirm-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="send-confirm-title"
+          >
+            <div>
+              <div className="eyebrow">One quick confirmation</div>
+              <h3 id="send-confirm-title">Did you send the message?</h3>
+              <p>
+                {leadName}. Confirming it once will save the contact date and
+                schedule the next follow-up automatically.
+              </p>
+            </div>
+            <button
+              className="btn primary"
+              type="button"
+              onClick={() =>
+                void updateMessage({
+                  subject: selected.subject,
+                  body: selected.body,
+                  status: "sent",
+                })
+              }
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Yes, mark sent"}
+            </button>
+            <button
+              className="btn"
+              type="button"
+              onClick={dismissSendConfirm}
+            >
+              Not yet
+            </button>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -610,7 +917,7 @@ function getSequenceLabel(input: {
     return {
       title: "Not contacted yet",
       detail:
-        "Mark the first message sent to start the 3, 7, and 14-day follow-up schedule.",
+        "Confirm the first message once. Webvidence will handle the contact date and 3, 7, and 14-day follow-up schedule.",
     };
   if (input.followUpAt)
     return {
@@ -619,6 +926,6 @@ function getSequenceLabel(input: {
     };
   return {
     title: "Waiting on reply",
-    detail: "Set a follow-up date or record an outcome.",
+    detail: "Record an outcome when something changes.",
   };
 }

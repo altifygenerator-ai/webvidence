@@ -10,11 +10,17 @@ import { isManualReviewFinding, type LeadOutcome } from "@/lib/leads/priority";
 
 export default async function LeadFile({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ queue?: string; source?: string }>;
 }) {
   const user = await requireViewer();
   const { id } = await params;
+  const { queue, source } = await searchParams;
+  const queueIds = String(queue || "").split(",").filter(Boolean).slice(0, 10);
+  const nextLeadId = queueIds[0] || null;
+  const remainingQueue = queueIds.slice(1);
   const supabase = await createClient();
 
   const { data: lead } = await supabase
@@ -54,6 +60,19 @@ export default async function LeadFile({
   const manualReviewFinding = (findings || []).find((finding) =>
     isManualReviewFinding(finding.code),
   );
+
+  const nextLeadResult = nextLeadId && nextLeadId !== id
+    ? await supabase
+        .from("leads")
+        .select("id,name,status,manual_review_required")
+        .eq("id", nextLeadId)
+        .maybeSingle()
+    : { data: null };
+  const nextLead = nextLeadResult.data &&
+    !["contacted", "replied", "interested", "follow_up", "quote_sent", "won", "lost", "not_interested", "do_not_contact", "archived"].includes(nextLeadResult.data.status || "") &&
+    !nextLeadResult.data.manual_review_required
+      ? nextLeadResult.data
+      : null;
 
   const [{ data: messages }, outreachProfileResult] = await Promise.all([
     supabase
@@ -221,7 +240,10 @@ export default async function LeadFile({
 
       <OutreachComposer
         leadId={lead.id}
+        leadName={lead.name}
         leadPhone={lead.phone || null}
+        nextLeadHref={nextLead ? `/dashboard/leads/${nextLead.id}?source=${source || "search"}${remainingQueue.length ? `&queue=${remainingQueue.join(",")}` : ""}#outreach` : null}
+        nextLeadName={nextLead?.name || null}
         initialStatus={lead.status || "new"}
         initialNotes={lead.notes || ""}
         initialFollowUpAt={toLocalInput(lead.next_follow_up_at)}

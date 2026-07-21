@@ -71,3 +71,23 @@ describe('manual website review acknowledgement', () => {
     expect(generateRoute).toContain('click “Mark as reviewed”');
   });
 });
+
+
+describe('smart outreach momentum', () => {
+  it('highlights recommended leads without adding database fields', () => {
+    const searchPage = source('app/dashboard/campaigns/page.tsx');
+    const recommendation = source('lib/leads/recommendation.ts');
+    expect(searchPage).toContain('Best places to start');
+    expect(searchPage).toContain('getTopContactRecommendations');
+    expect(searchPage).toContain('Add 3 more');
+    expect(recommendation).toContain('Phone available');
+  });
+
+  it('asks for one send confirmation and keeps bookkeeping automatic', () => {
+    const composer = source('components/outreach-composer.tsx');
+    expect(composer).toContain('Did you send the message?');
+    expect(composer).toContain('Yes, mark sent');
+    expect(composer).toContain('Review next lead');
+    expect(composer).toContain('Lead tracking and notes');
+  });
+});

@@ -1,5 +1,21 @@
 # Webvidence Release Notes
 
+## Smart recommendations and outreach momentum update
+
+- Added a compact **Best places to start** block above search results that ranks up to three analyzed, contactable, uncontacted businesses.
+- Separated contact recommendation from the evidence score so blocked, incomplete, already-contacted, or hard-to-reach leads are not pushed to the top.
+- Translated recommendation reasons into normal business-owner language instead of technical audit terms.
+- Added a quiet daily outreach batch, a shrinking remaining count, a good stopping point, and an optional **Add 3 more** action stored only in the current browser session.
+- Added a return-from-email/text confirmation sheet so one tap records the send, contact date, and existing follow-up schedule accurately.
+- Added a next-recommended-lead handoff across the first three recommendations.
+- Remembered the user’s preferred outreach channel in the browser.
+- Added one-tap Replied, Interested, Not a fit, and Won actions while moving detailed pipeline fields and notes into a collapsible section.
+- Simplified the first search form to business type and location, with the existing radius, result mix, count, country, and analysis settings under **Search options**.
+- Collapsed full audit findings behind a detail control while keeping one plain-language finding visible on each result.
+- Tightened the mobile header and bottom navigation, added a single thumb-reachable outreach action, and changed the send confirmation into a mobile bottom sheet.
+- Hid empty dashboard metrics until a first search exists and limited provider-unit reporting to administrators.
+- No Supabase migration is required. All progress and recommendation behavior uses existing leads, messages, audits, contact dates, and sent timestamps.
+
 ## Quiet onboarding and compact attention update
 
 - Replaced the always-open Today’s Work block with a compact, collapsible attention panel.
