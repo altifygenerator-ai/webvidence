@@ -105,3 +105,12 @@ Existing projects must run `supabase/004_functionality_upgrade.sql`. Projects th
 - Reworked search-result cards, lead files, audit findings, outreach drafts, billing, and settings for narrow screens.
 - Increased touch targets and input sizing to reduce missed taps and prevent iPhone form zoom.
 - Added safe-area spacing for modern iPhone navigation areas and removed horizontal page overflow.
+
+## Conversation-first outreach landing page
+
+- Added `/conversation-first-outreach` as a focused service landing page inside Webvidence.
+- Positioned a five-spot, $149 founding beta for a custom outreach audit and setup.
+- Added honest problem/method/fit sections, a Webvidence workflow connection, FAQ schema, and service schema.
+- Added a no-database application form that opens a prefilled email for user review.
+- Added the page to the public sitemap and footer navigation.
+- Added responsive layouts for desktop, tablet, and mobile.

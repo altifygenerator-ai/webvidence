@@ -67,3 +67,11 @@ Validated from `webvidence-articles-full.zip`, the newest full Webvidence packag
 4. Test one first message, each follow-up step, an outcome, a blocked website, a normal website, Pipeline filters, and the dashboard badge using a non-admin test account.
 
 The local production build was compiled without live Supabase, Stripe, Google, or OpenAI credentials. Live provider calls and the production database migration still require the connected production environment.
+
+## Conversation-first outreach landing page validation
+
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm test` passed: 74 tests.
+- `npm run build` passed and generated `/conversation-first-outreach`.
+- No Supabase migration or new environment variable is required.
