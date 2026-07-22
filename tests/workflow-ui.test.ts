@@ -5,89 +5,108 @@ import { join } from 'node:path';
 const root = process.cwd();
 const source = (file: string) => readFileSync(join(root, file), 'utf8');
 
-describe('mobile workspace navigation', () => {
-  it('uses a numbered 1 through 4 quick bar and avoids refresh races', () => {
-    const shell = source('components/app-shell.tsx');
-    expect(shell).toContain('["Settings", "/dashboard/settings", "04"]');
-    expect(shell).toContain('controller.abort()');
-    expect(shell).not.toContain('router.refresh()');
+describe('focused lead workflow', () => {
+  it('shows one status-aware next-step area and explicit intent choices', () => {
+    const composer = source('components/outreach-composer.tsx');
+    expect(composer).toContain('Next step');
+    expect(composer).toContain('Start a conversation');
+    expect(composer).toContain('Use a website finding');
+    expect(composer).toContain('Follow up');
+    expect(composer).toContain('useState<OutreachIntent>("conversation")');
+    expect(composer).toContain('Noticed something about this business? Add it');
   });
 
-  it('pins the quick bar to the physical viewport bottom', () => {
-    const css = source('app/globals.css');
-    expect(css).toContain('inset-block-end: 0 !important');
-    expect(css).toContain('translate3d(0, 0, 0)');
+  it('does not expose reply planning until the prospect replied', () => {
+    const composer = source('components/outreach-composer.tsx');
+    expect(composer).toContain('They replied');
+    expect(composer).toContain('What did they say?');
+    expect(composer).toContain('Why Webvidence suggested this');
+    expect(composer).not.toContain('floating-chat');
+  });
+
+  it('keeps evidence and history behind progressive disclosure', () => {
+    const leadPage = source('app/dashboard/leads/[id]/page.tsx');
+    const composer = source('components/outreach-composer.tsx');
+    expect(leadPage).toContain('<details className="evidence-file-section evidence-disclosure">');
+    expect(composer).toContain('<details className="message-history-disclosure">');
+    expect(composer).toContain('<details className="lead-tracking-details">');
   });
 });
 
-describe('direct outreach handoff', () => {
-  it('opens email and text apps without automatically sending', () => {
+describe('campaign and pipeline focus', () => {
+  it('presents recommendations as businesses to review, not guaranteed buyers', () => {
+    const page = source('app/dashboard/campaigns/page.tsx');
+    expect(page).toContain('Best places to review first');
+    expect(page).toContain('Based on the available business details');
+    expect(page).toContain("item.signals.slice(0, 2)");
+    expect(page).toContain('Review business');
+    expect(page).not.toContain('Best places to start');
+  });
+
+  it('keeps the pipeline compact and subordinates bulk actions', () => {
+    const table = source('components/leads-table.tsx');
+    expect(table).toContain('Bulk actions');
+    expect(table).toContain('<span>Last contact</span>');
+    expect(table).toContain('<span>Next action</span>');
+    expect(table).toContain('<span>Due</span>');
+    expect(table).toContain('>Open</Link>');
+    expect(table).not.toContain('Full findings');
+    expect(table).not.toContain('LeadAnalysisButton');
+  });
+});
+
+describe('mobile workflow', () => {
+  it('renders one sticky primary action and safe mobile sheets', () => {
     const composer = source('components/outreach-composer.tsx');
-    const links = source('lib/outreach/links.ts');
-    expect(links).toContain('mailto:');
-    expect(links).toContain('sms:');
+    const css = source('app/globals.css');
+    expect(composer).toContain('mobile-outreach-dock');
+    expect(composer).toContain('buildMobileAction');
+    expect(css).toContain('safe-area-inset-bottom');
+    expect(css).toContain('max-height:88dvh');
+    expect(css).toContain('font-size:16px');
+    expect(css).toContain('@media(max-width:390px)');
+  });
+
+  it('preserves direct email and text handoff without automatic sending', () => {
+    const composer = source('components/outreach-composer.tsx');
     expect(composer).toContain('Open email app');
     expect(composer).toContain('Open text app');
-    expect(composer).toContain('buildMailtoHref');
-    expect(composer).toContain('buildSmsHref');
-    expect(composer).not.toContain('new URLSearchParams');
-    expect(composer).toMatch(/does not\s+send it/);
-    expect(composer).toMatch(/mark it sent automatically/);
-  });
-});
-
-describe('contact history and pipeline controls', () => {
-  it('returns lead status with both fresh and reopened campaign results', () => {
-    expect(source('app/api/search/route.ts')).toContain('status,\n      audit: null');
-    expect(source('app/api/campaigns/route.ts')).toContain('status: lead.status');
-    expect(source('app/dashboard/campaigns/page.tsx')).toContain('Open contacted lead');
-  });
-
-  it('supports the requested pipeline sorting and compact score treatment', () => {
-    const page = source('app/dashboard/leads/page.tsx');
-    const table = source('components/leads-table.tsx');
-    expect(page).toContain('["score_desc", "Highest score"]');
-    expect(page).toContain('["score_asc", "Lowest score"]');
-    expect(page).toContain('["recent", "Most recently searched"]');
-    expect(page).toContain('["no_website", "No website first"]');
-    expect(page).toContain('active leads saved');
-    expect(table).toContain('lead-score-inline');
-    expect(table).not.toContain('<span>Score</span>');
-  });
-});
-
-
-describe('manual website review acknowledgement', () => {
-  it('lets the user clear the manual-review gate without changing audit evidence', () => {
-    const notice = source('components/manual-review-notice.tsx');
-    const leadRoute = source('app/api/leads/[id]/route.ts');
-    const generateRoute = source('app/api/generate/route.ts');
-
-    expect(notice).toContain('Mark as reviewed');
-    expect(notice).toContain('manualReviewCompleted: true');
-    expect(leadRoute).toContain('manualReviewCompleted: z.literal(true).optional()');
-    expect(leadRoute).toContain('update.manual_review_required = false');
-    expect(generateRoute).toContain('lead.manual_review_required === true');
-    expect(generateRoute).toContain('click “Mark as reviewed”');
-  });
-});
-
-
-describe('smart outreach momentum', () => {
-  it('highlights recommended leads without adding database fields', () => {
-    const searchPage = source('app/dashboard/campaigns/page.tsx');
-    const recommendation = source('lib/leads/recommendation.ts');
-    expect(searchPage).toContain('Best places to start');
-    expect(searchPage).toContain('getTopContactRecommendations');
-    expect(searchPage).toContain('Add 3 more');
-    expect(recommendation).toContain('Phone available');
-  });
-
-  it('asks for one send confirmation and keeps bookkeeping automatic', () => {
-    const composer = source('components/outreach-composer.tsx');
     expect(composer).toContain('Did you send the message?');
-    expect(composer).toContain('Yes, mark sent');
-    expect(composer).toContain('Review next lead');
-    expect(composer).toContain('Lead tracking and notes');
+    expect(composer).toContain('Webvidence never sends automatically');
+  });
+});
+
+describe('persistence and failure safety', () => {
+  it('uses an additive migration and existing message directions', () => {
+    const migration = source('supabase/007_conversation_workflow.sql').toLowerCase();
+    expect(migration).toContain('add column if not exists business_observation');
+    expect(migration).toContain('parent_message_id');
+    expect(migration).toContain('row-level security');
+    expect(migration).not.toContain('drop table');
+    expect(migration).not.toContain('truncate ');
+  });
+
+  it('preserves an inbound reply when response generation fails', () => {
+    const route = source('app/api/replies/route.ts');
+    const saveIndex = route.indexOf("direction: 'inbound'");
+    const analyzeIndex = route.indexOf('const result = await analyzeReply');
+    expect(saveIndex).toBeGreaterThan(-1);
+    expect(analyzeIndex).toBeGreaterThan(saveIndex);
+    expect(route).toContain('The reply was saved, but Webvidence could not prepare a response');
+  });
+
+  it('requires a clear saved need before server-side service-introduction generation', () => {
+    const generate = source('app/api/generate/route.ts');
+    expect(generate).toContain("latestReply?.recommended_action !== 'introduce_service'");
+    expect(generate).toContain("lead.status !== 'interested'");
+  });
+
+  it('uses operation locks and workspace scopes for duplicate and cross-workspace protection', () => {
+    const generate = source('app/api/generate/route.ts');
+    const replies = source('app/api/replies/route.ts');
+    expect(generate).toContain('acquireOperationLock');
+    expect(replies).toContain('acquireOperationLock');
+    expect(generate).toContain(".eq('workspace_id', user.workspaceId)");
+    expect(replies).toContain(".eq('workspace_id', user.workspaceId)");
   });
 });

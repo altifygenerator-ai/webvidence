@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { COUNTRIES } from '@/lib/countries';
+import { isCountryOnlyLocation, validateBusinessCategory } from '@/lib/search/validation';
 import {
-  getContactRecommendation,
   getPlainLeadReason,
   getTopContactRecommendations,
   isRecommendationPending,
+  type ContactRecommendation,
 } from '@/lib/leads/recommendation';
 
 type Finding = {
@@ -88,6 +89,7 @@ export default function Campaigns() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [searchGuidance, setSearchGuidance] = useState('');
   const [mode, setMode] = useState<'demo' | 'live' | ''>('');
   const [auditingId, setAuditingId] = useState('');
   const pendingLeadIds = leads.filter((lead) => lead.auditStatus === 'queued' || lead.auditStatus === 'running').map((lead) => lead.id);
@@ -249,6 +251,18 @@ export default function Campaigns() {
 
   async function run(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const categoryCheck = validateBusinessCategory(String(formData.get('category') || ''));
+    const city = String(formData.get('city') || '').trim();
+    if (!categoryCheck.valid) {
+      setSearchGuidance(categoryCheck.message || 'Enter one kind of local business.');
+      return;
+    }
+    if (!city || isCountryOnlyLocation(city)) {
+      setSearchGuidance('Enter a city or postal code, not only a country.');
+      return;
+    }
+    setSearchGuidance('');
     setLoading(true);
     setLoadingStage('Locating the market…');
     setError('');
@@ -269,7 +283,6 @@ export default function Campaigns() {
     }, 1800);
 
     try {
-      const formData = new FormData(event.currentTarget);
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -344,7 +357,7 @@ export default function Campaigns() {
       <div className="topline">
         <div>
           <div className="eyebrow">Live prospect search</div>
-          <h2>Find website opportunities</h2>
+          <h2>Find businesses worth reviewing</h2>
         </div>
         {mode && <span className={`tag ${mode === 'live' ? 'tag-live' : 'tag-demo'}`}>{mode} data</span>}
       </div>
@@ -409,7 +422,7 @@ export default function Campaigns() {
         <div className="search-basics">
           <label>
             <span>Business type</span>
-            <input className="input" name="category" placeholder="Roofers" required />
+            <input className="input" name="category" placeholder="Roofers" required aria-describedby="business-type-guidance" onChange={(event) => { const result = validateBusinessCategory(event.target.value); setSearchGuidance(result.valid ? '' : result.message || ''); }} />
           </label>
           <label>
             <span>Location</span>
@@ -472,6 +485,12 @@ export default function Campaigns() {
         </details>
       </form>
 
+      {searchGuidance ? (
+        <div className="search-guidance" id="business-type-guidance" role="alert">
+          {searchGuidance}
+        </div>
+      ) : null}
+
       <details className="search-help-disclosure">
         <summary>How the result mixes work</summary>
         <p>
@@ -492,14 +511,15 @@ export default function Campaigns() {
               <div className="eyebrow">Search results</div>
               <h3>{leads.length} {openedCampaign ? 'saved businesses' : 'businesses collected'}</h3>
             </div>
-            <small>{openedCampaign ? `Loaded from ${openedCampaign.category} in ${openedCampaign.location}. No search credit was used.` : 'Webvidence sorts the strongest places to start, but you still decide who is worth contacting.'}</small>
+            <small>{openedCampaign ? `Loaded from ${openedCampaign.category} in ${openedCampaign.location}. No search credit was used.` : 'Webvidence highlights businesses worth reviewing, but you still decide who is worth contacting.'}</small>
           </div>
 
-          <section className="start-here-block" aria-label="Recommended businesses to contact first">
+          <section className="start-here-block" aria-label="Businesses to review first">
             <div className="start-here-head">
               <div>
                 <div className="eyebrow">Start here</div>
-                <h4>{recommendations.length ? 'Best places to start' : pendingRecommendationChecks ? 'Finding the best places to start…' : 'No clear recommendation yet'}</h4>
+                <h4>{recommendations.length ? 'Best places to review first' : pendingRecommendationChecks ? 'Finding the best places to review first…' : 'No clear recommendation yet'}</h4>
+                <p className="start-here-support">Based on the available business details, contact options, website evidence, and your previous activity.</p>
               </div>
               <div className="outreach-progress-compact">
                 <b>{momentum.sentToday} of {dailyTarget}</b>
@@ -669,7 +689,7 @@ function RecommendationRow({
   index,
   nextLeadIds,
 }: {
-  item: ReturnType<typeof getContactRecommendation<Lead>> extends infer R ? Exclude<R, null> : never;
+  item: ContactRecommendation<Lead>;
   index: number;
   nextLeadIds: string[];
 }) {
@@ -679,13 +699,26 @@ function RecommendationRow({
       <div>
         <b>{item.lead.name}</b>
         <p>{item.reason}</p>
-        {item.signals.length ? <small>{item.signals.join(' · ')}</small> : null}
+        {item.signals.length ? <small>{item.signals.slice(0, 2).join(' · ')}</small> : null}
       </div>
-      <Link className="btn primary" href={buildLeadHref(item.lead.id, nextLeadIds)}>
-        Review and draft
+      <Link className="btn primary" href={buildLeadHref(item.lead.id, nextLeadIds)} onClick={() => void recordRecommendedOpen(item.lead.id)}>
+        Review business
       </Link>
     </article>
   );
+}
+
+async function recordRecommendedOpen(leadId: string) {
+  try {
+    await fetch('/api/product-events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ event: 'recommended_prospect_opened', leadId, surface: 'campaign_results' }),
+      keepalive: true,
+    });
+  } catch {
+    // Recommendation tracking must never block navigation.
+  }
 }
 
 function buildLeadHref(leadId: string, nextLeadIds: string[]) {

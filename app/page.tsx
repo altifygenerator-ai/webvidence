@@ -8,8 +8,8 @@ import { MarketingFooter } from '@/components/marketing-footer';
 import { absoluteUrl, publicMetadata, SITE_NAME, SITE_URL } from '@/lib/seo';
 
 export const metadata: Metadata = publicMetadata({
-  title: 'Find Web Design Clients With Real Website Evidence',
-  description: 'Search local businesses, audit up to six website pages, rank the strongest web design opportunities, and write outreach based on real findings.',
+  title: 'Research Local Businesses and Prepare Better Web Design Outreach',
+  description: 'Research local businesses, decide who is worth contacting, and prepare grounded web design outreach without automatically sending anything.',
   path: '/',
 });
 
@@ -51,7 +51,7 @@ export default async function Home() {
         '@id': `${SITE_URL}#website`,
         url: SITE_URL,
         name: SITE_NAME,
-        description: 'Evidence-backed local business prospecting for freelance web designers and developers.',
+        description: 'Local business research and conversation-first outreach for independent web designers and developers.',
         publisher: { '@id': `${SITE_URL}#organization` },
         inLanguage: 'en-US',
       },
@@ -60,9 +60,9 @@ export default async function Home() {
         '@id': `${SITE_URL}#software`,
         name: SITE_NAME,
         url: SITE_URL,
-        description: 'Find local businesses, audit their public websites, qualify web design opportunities, and create evidence-based outreach drafts.',
+        description: 'Research local businesses, review public website evidence, decide who is worth contacting, and prepare editable outreach drafts.',
         applicationCategory: 'BusinessApplication',
-        applicationSubCategory: 'Sales prospecting and website audit software',
+        applicationSubCategory: 'Business research and outreach workflow software',
         operatingSystem: 'Web browser',
         browserRequirements: 'Requires a modern web browser and an internet connection.',
         provider: { '@id': `${SITE_URL}#organization` },
@@ -71,7 +71,7 @@ export default async function Home() {
           'Multi-page public website sampling',
           'Mobile PageSpeed checks',
           'Opportunity scoring',
-          'Evidence-based outreach drafts',
+          'Grounded editable outreach drafts',
           'Saved prospect pipeline',
         ],
         offers: publicPlans.map((plan) => ({
@@ -88,8 +88,8 @@ export default async function Home() {
         '@type': 'WebPage',
         '@id': `${SITE_URL}#webpage`,
         url: SITE_URL,
-        name: 'Find Web Design Clients With Real Website Evidence',
-        description: 'Search local businesses and qualify website opportunities with factual findings.',
+        name: 'Research Local Businesses and Prepare Better Web Design Outreach',
+        description: 'Research local businesses, understand the opportunity, and prepare better outreach.',
         isPartOf: { '@id': `${SITE_URL}#website` },
         about: { '@id': `${SITE_URL}#software` },
         primaryImageOfPage: { '@type': 'ImageObject', url: absoluteUrl('/opengraph-image') },
@@ -113,13 +113,13 @@ export default async function Home() {
         <section className="hero shell">
           <div className="hero-copy">
             <div className="section-code"><span>01</span> Built for freelance web developers</div>
-            <h1>Find businesses worth contacting.</h1>
-            <p className="hero-lede">Search a trade and location. Webvidence pulls in real businesses, checks the site, and helps you decide who is actually worth your time.</p>
+            <h1>Find businesses worth reviewing.</h1>
+            <p className="hero-lede">Search a trade and location. Webvidence brings in real businesses, checks public website evidence, and helps you decide who is worth contacting and how to start the conversation.</p>
             <div className="hero-actions">
               <Link className="action primary" href={viewer ? '/dashboard/campaigns' : '/signup'}><span>{viewer ? 'Run a prospect search' : 'Try it free'}</span><b>↗</b></Link>
               <Link className="text-link" href="/#product-tour">See the app before signing up <span>↓</span></Link>
             </div>
-            <div className="hero-note"><b>No automatic spam.</b> You review the evidence and decide who to contact.</div>
+            <div className="hero-note"><b>No automatic sending.</b> You review the business, choose the approach, edit the draft, and stay in control.</div>
           </div>
 
           <div className="hero-evidence-wrap">
@@ -145,7 +145,7 @@ export default async function Home() {
         </section>
 
         <section className="proof-strip">
-          <div className="shell proof-inner"><span>SEARCH A MARKET</span><i /> <span>CHECK THE WEBSITE</span><i /> <span>RANK THE OPPORTUNITY</span><i /> <span>WRITE A REAL OPENER</span></div>
+          <div className="shell proof-inner"><span>SEARCH A MARKET</span><i /> <span>REVIEW THE BUSINESS</span><i /> <span>DECIDE WHO IS WORTH YOUR TIME</span><i /> <span>START A REAL CONVERSATION</span></div>
         </section>
 
         <section id="product-tour" className="product-tour">
@@ -155,7 +155,7 @@ export default async function Home() {
                 <div className="section-code"><span>02</span> What you actually get</div>
                 <h2>From a location search to a usable prospect list.</h2>
               </div>
-              <p>This is the working part of Webvidence. Search a market, open a business, read the findings, then draft a message without starting from a blank page.</p>
+              <p>This is the working part of Webvidence. Search a market, open one business, review the evidence, then choose whether to start a conversation, use a verified finding, or move on.</p>
             </div>
 
             <div className="product-window" aria-label="Webvidence product preview">
@@ -189,7 +189,7 @@ export default async function Home() {
                       <div className="preview-file-head"><div><small>SELECTED PROSPECT</small><h4>Lone Pine Roofing</h4></div><strong>88</strong></div>
                       <div className="preview-finding"><span>HIGH</span><div><b>No inquiry form found</b><small>The sampled pages do not show a clear request-a-quote form.</small></div></div>
                       <div className="preview-finding"><span>MED</span><div><b>Mobile phone path is weak</b><small>A visitor has to hunt for a usable call action.</small></div></div>
-                      <div className="preview-outreach"><small>FACEBOOK OPENER</small><p>Hey, I came across your roofing work around Austin. I noticed the site makes it pretty hard to request a quote from a phone. Are most of your calls coming through Google right now or mainly referrals?</p></div>
+                      <div className="preview-outreach"><small>FACEBOOK OPENER</small><p>Hey, I came across your roofing work around Austin. Are most of your new jobs coming through referrals right now, or are you trying to grow another source?</p></div>
                     </div>
                   </div>
                 </div>
@@ -209,7 +209,7 @@ export default async function Home() {
           <div className="workflow-board">
             <article className="workflow-step offset-one"><span>01</span><div><small>SEARCH</small><h3>Pick a trade and location.</h3><p>Search by city, state or province, country, radius, category, review count, and website condition.</p></div></article>
             <article className="workflow-step"><span>02</span><div><small>REVIEW</small><h3>See what the site is missing.</h3><p>Open factual findings from the homepage and a small sample of useful internal pages, plus mobile PageSpeed checks.</p></div></article>
-            <article className="workflow-step offset-two"><span>03</span><div><small>CONTACT</small><h3>Start with one true observation.</h3><p>Draft an opener, save notes, mark messages sent, and keep follow-up dates with the lead.</p></div></article>
+            <article className="workflow-step offset-two"><span>03</span><div><small>CONTACT</small><h3>Choose the right next move.</h3><p>Start a normal conversation, use one verified finding when it fits, record replies, and keep follow-up dates with the lead.</p></div></article>
           </div>
         </section>
 
@@ -217,7 +217,7 @@ export default async function Home() {
           <div className="shell manifesto-grid">
             <div className="manifesto-number">04</div>
             <blockquote>A phone number is not enough to make a business a good lead.</blockquote>
-            <div><h3>Webvidence helps you narrow the list.</h3><p>Look for an active business, a visible website problem, a service you can actually offer, and a reason to start the conversation without making something up.</p><Link className="text-link light" href={viewer ? '/dashboard' : '/signup'}>{viewer ? 'Return to your dashboard' : 'Open a free account'} <span>↗</span></Link></div>
+            <div><h3>Webvidence helps you narrow the list.</h3><p>Look for an active business, a clear contact path, evidence worth reviewing, a service you can actually offer, and a reason to start the conversation without making something up.</p><Link className="text-link light" href={viewer ? '/dashboard' : '/signup'}>{viewer ? 'Return to your dashboard' : 'Open a free account'} <span>↗</span></Link></div>
           </div>
         </section>
 

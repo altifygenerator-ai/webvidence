@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PLANS } from "@/lib/plans";
 import { getPriorityAction, type LeadOutcome } from "@/lib/leads/priority";
 import {
+  getLocalDayBounds,
   normalizeTimezoneOffset,
   TIMEZONE_OFFSET_COOKIE,
 } from "@/lib/leads/timezone";
@@ -36,12 +37,22 @@ type DashboardLead = {
   manual_review_required: boolean;
 };
 
+
+type DashboardCampaign = {
+  id: string;
+  category: string;
+  location: string;
+  radius_miles: number;
+  status: string;
+};
+
 type DashboardMessage = {
   id: string;
   lead_id: string;
   status: string;
   direction: string;
   created_at: string;
+  sent_at: string | null;
 };
 
 export default async function Dashboard() {
@@ -61,6 +72,7 @@ export default async function Dashboard() {
     apiResult,
     searchHistoryResult,
     auditHistoryResult,
+    campaignResult,
   ] = await Promise.all([
     db
       .from("leads")
@@ -71,7 +83,7 @@ export default async function Dashboard() {
       .limit(500),
     db
       .from("messages")
-      .select("id,lead_id,status,direction,created_at")
+      .select("id,lead_id,status,direction,created_at,sent_at")
       .eq("workspace_id", user.workspaceId)
       .order("created_at", { ascending: false })
       .limit(500),
@@ -93,27 +105,18 @@ export default async function Dashboard() {
       .from("audits")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", user.workspaceId),
+    db
+      .from("campaigns")
+      .select("id,category,location,radius_miles,status")
+      .eq("workspace_id", user.workspaceId)
+      .in("status", ["active", "paused"])
+      .order("updated_at", { ascending: false })
+      .limit(12),
   ]);
 
   const leads = (leadResult.data || []) as DashboardLead[];
   const messages = (messageResult.data || []) as DashboardMessage[];
-  const ready = leads.filter((lead) =>
-    ["ready_to_contact", "reviewing", "new"].includes(lead.status),
-  ).length;
-  const contacted = leads.filter((lead) =>
-    [
-      "contacted",
-      "replied",
-      "interested",
-      "follow_up",
-      "quote_sent",
-      "won",
-    ].includes(lead.status),
-  ).length;
-  const replies = leads.filter((lead) =>
-    ["replied", "interested", "quote_sent", "won"].includes(lead.status),
-  ).length;
-  const wins = leads.filter((lead) => lead.status === "won").length;
+  const campaigns = (campaignResult.data || []) as DashboardCampaign[];
   const searchUsed =
     usageResult.data?.find((item) => item.metric === "search")?.used || 0;
   const auditUsed =
@@ -132,6 +135,13 @@ export default async function Dashboard() {
   const sentMessages = messages.filter(
     (message) => message.status === "sent" && message.direction !== "inbound",
   );
+  const { start: startToday, end: endToday } = getLocalDayBounds(now, timezoneOffset);
+  const sentToday = sentMessages.filter((message) => {
+    const value = message.sent_at || message.created_at;
+    const timestamp = new Date(value).getTime();
+    return timestamp >= startToday.getTime() && timestamp < endToday.getTime();
+  }).length;
+  const repliesNeedingAttention = leads.filter((lead) => lead.status === "replied").length;
   const searchCount = searchHistoryResult.count || 0;
   const onboardingStage = getOnboardingStage({
     searches: searchCount,
@@ -246,72 +256,47 @@ export default async function Dashboard() {
 
       {searchCount > 0 ? (
         <>
-      <div className="grid dashboard-metrics">
-        <div className="card">
-          <div className="muted">Ready to review</div>
-          <div className="metric">{ready}</div>
-        </div>
-        <div className="card">
-          <div className="muted">Worked prospects</div>
-          <div className="metric">{contacted}</div>
-        </div>
-        <div className="card">
-          <div className="muted">Replies / interest</div>
-          <div className="metric">{replies}</div>
-        </div>
-        <div className="card">
-          <div className="muted">Projects won</div>
-          <div className="metric">{wins}</div>
-        </div>
-      </div>
-
-      <section className="section usage-section">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">This month</div>
-            <h3>Plan usage and operations</h3>
-          </div>
-        </div>
-        <div className="usage-grid">
-          <div>
-            <span>Local searches</span>
-            <b>
-              {searchUsed} / {PLANS[user.plan].searches}
-            </b>
-            <progress max={PLANS[user.plan].searches} value={searchUsed} />
-          </div>
-          <div>
-            <span>Website analyses</span>
-            <b>
-              {auditUsed} / {PLANS[user.plan].audits}
-            </b>
-            <progress max={PLANS[user.plan].audits} value={auditUsed} />
-          </div>
-          <div>
-            <span>Outreach drafts</span>
-            <b>
-              {messageUsed} / {PLANS[user.plan].messages}
-            </b>
-            <progress max={PLANS[user.plan].messages} value={messageUsed} />
-          </div>
-          <div>
-            <span>Saved messages</span>
-            <b>{messages.length}</b>
-            <small>Draft, approved, and sent history</small>
-          </div>
-          {user.isAdmin ? (
-            <div>
-              <span>Logged provider units</span>
-              <b>{apiUnits}</b>
-              <small>
-                {estimatedCost > 0
-                  ? `$${estimatedCost.toFixed(2)} estimated`
-                  : "Usage is recorded for cost review"}
-              </small>
+          <section className="section dashboard-today-section">
+            <div className="panel-heading">
+              <div><div className="eyebrow">Today</div><h3>What needs attention</h3></div>
             </div>
-          ) : null}
-        </div>
-      </section>
+            <div className="dashboard-today-counts">
+              <Link href="/dashboard/leads?filter=interested"><b>{repliesNeedingAttention}</b><span>Replies needing attention</span></Link>
+              <Link href="/dashboard/leads?filter=due"><b>{dueEntries.length}</b><span>Follow-ups due</span></Link>
+              <Link href="/dashboard/leads?filter=never_contacted"><b>{firstContactEntries.length}</b><span>Businesses ready to review</span></Link>
+            </div>
+          </section>
+
+          <section className="section dashboard-progress-section">
+            <div className="panel-heading">
+              <div><div className="eyebrow">Outreach progress</div><h3>{sentToday} contacted today</h3></div>
+              <Link className="btn" href="/dashboard/leads?filter=never_contacted">Review next business</Link>
+            </div>
+            <progress max={5} value={Math.min(5, sentToday)} />
+            <small>{sentToday >= 5 ? "Daily goal reached. Stop when the work is no longer useful." : `${Math.max(0, 5 - sentToday)} left in the default daily batch.`}</small>
+          </section>
+
+          <details className="dashboard-campaigns-disclosure">
+            <summary><span><span className="eyebrow">Saved markets</span><b>Active campaigns</b></span><small>{campaigns.length} open</small></summary>
+            <div className="dashboard-campaign-list">
+              {campaigns.length ? campaigns.map((campaign) => (
+                <Link key={campaign.id} href="/dashboard/campaigns">
+                  <b>{campaign.category}</b>
+                  <span>{campaign.location} · {campaign.radius_miles} miles · {campaign.status}</span>
+                </Link>
+              )) : <p className="muted">No active campaigns.</p>}
+            </div>
+          </details>
+
+          <details className="dashboard-usage-disclosure">
+            <summary>Plan usage <small>{searchUsed} searches · {auditUsed} analyses · {messageUsed} drafts</small></summary>
+            <div className="usage-grid">
+              <div><span>Local searches</span><b>{searchUsed} / {PLANS[user.plan].searches}</b><progress max={PLANS[user.plan].searches} value={searchUsed} /></div>
+              <div><span>Website analyses</span><b>{auditUsed} / {PLANS[user.plan].audits}</b><progress max={PLANS[user.plan].audits} value={auditUsed} /></div>
+              <div><span>Outreach drafts</span><b>{messageUsed} / {PLANS[user.plan].messages}</b><progress max={PLANS[user.plan].messages} value={messageUsed} /></div>
+              {user.isAdmin ? <div><span>Logged provider units</span><b>{apiUnits}</b><small>{estimatedCost > 0 ? `$${estimatedCost.toFixed(2)} estimated` : "Usage recorded for review"}</small></div> : null}
+            </div>
+          </details>
         </>
       ) : null}
     </AppShell>

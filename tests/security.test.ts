@@ -204,7 +204,7 @@ describe('lead-priority upgrade guards', () => {
     expect(generate).toContain("'automated_check_blocked'");
     expect(generate).toContain('NON_OUTREACH_FINDING_CODES');
     expect(generate).toContain('click “Mark as reviewed”');
-    expect(generate.indexOf('await consumeMessage(user)')).toBeGreaterThan(generate.indexOf('manualReviewRequired'));
+    expect(generate.indexOf('await consumeMessage(user)')).toBeGreaterThan(generate.indexOf('lead.manual_review_required'));
   });
 
   it('stores blocked or unreachable websites as partial manual-review results', () => {

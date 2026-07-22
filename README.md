@@ -142,3 +142,7 @@ Public SEO endpoints:
 - `/twitter-image`
 
 Private account, authentication, dashboard, and API routes are excluded from indexing.
+
+## Focused conversation workflow deployment
+
+See `CURRENT_PRODUCT_INVENTORY.md` for the preserved-feature inventory and `CONVERSATION_WORKFLOW_UPDATE.md` for migration `007`, new routes, privacy details, AI data handling, and the manual test checklist.

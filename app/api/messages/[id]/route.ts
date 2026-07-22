@@ -11,6 +11,7 @@ const schema = z.object({
   subject: z.string().max(200).nullable().optional(),
   body: z.string().min(1).max(10000).optional(),
   status: z.enum(['draft', 'approved', 'sent', 'received', 'failed']).optional(),
+  copied: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -38,7 +39,9 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
 
     const changedAt = new Date().toISOString();
     const transitionToSent = input.status === 'sent' && current.status !== 'sent';
-    const update: Record<string, unknown> = { ...input, updated_at: changedAt };
+    const { copied, ...messagePatch } = input;
+    const update: Record<string, unknown> = { ...messagePatch, updated_at: changedAt };
+    if (copied) update.copied_at = changedAt;
     if (input.status === 'approved') update.approved_at = changedAt;
     if (transitionToSent) {
       update.sent_at = changedAt;
@@ -52,7 +55,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       .update(update)
       .eq('id', id)
       .eq('workspace_id', user.workspaceId)
-      .select('id,lead_id,channel,subject,body,status,created_at,updated_at,sent_at')
+      .select('id,lead_id,channel,contact_channel,subject,body,status,direction,intent,parent_message_id,created_at,updated_at,sent_at,copied_at')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

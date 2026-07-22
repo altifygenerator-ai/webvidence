@@ -17,6 +17,7 @@ const schema = z.object({
   nextFollowUpAt: z.string().datetime().nullable().optional(),
   leadOutcome: z.enum(LEAD_OUTCOMES).nullable().optional(),
   manualReviewCompleted: z.literal(true).optional(),
+  businessObservation: z.string().trim().max(1000).nullable().optional(),
 });
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -43,6 +44,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     const update: Record<string, unknown> = { updated_at: changedAt };
     if (input.status !== undefined) update.status = input.status;
     if (input.notes !== undefined) update.notes = input.notes;
+    if (input.businessObservation !== undefined) update.business_observation = input.businessObservation || null;
     if (input.nextFollowUpAt !== undefined) {
       update.next_follow_up_at = input.nextFollowUpAt;
       if (input.nextFollowUpAt) update.follow_up_stopped_at = null;
@@ -70,7 +72,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       .update(update)
       .eq('id', id)
       .eq('workspace_id', user.workspaceId)
-      .select('id,status,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,lead_outcome_updated_at,follow_up_step,follow_up_stopped_at,manual_review_required,manual_review_reason')
+      .select('id,status,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,lead_outcome_updated_at,follow_up_step,follow_up_stopped_at,manual_review_required,manual_review_reason')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ lead: data });

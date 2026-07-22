@@ -13,6 +13,7 @@ import { acquireOperationLock, releaseOperationLock, type OperationLock } from '
 import { queueLeadAudits, processAuditJobs } from '@/lib/jobs/audits';
 import { logApiUsage } from '@/lib/data/api-usage';
 import { countryName, isCountryCode } from '@/lib/countries';
+import { isCountryOnlyLocation, validateBusinessCategory } from '@/lib/search/validation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -93,12 +94,19 @@ export async function POST(req: Request) {
     assertTrustedMutation(req, { requireJson: true });
     await enforceRateLimit(req, user.id, RATE_LIMITS.search);
     const input = schema.parse(await req.json());
+    const categoryCheck = validateBusinessCategory(input.category);
+    if (!categoryCheck.valid) {
+      throw new SearchHttpError(categoryCheck.message || 'Enter one kind of local business.', 400);
+    }
     const countryCode = input.countryCode?.toUpperCase();
     const requestedLocation = input.location || [
       input.city,
       input.region,
       countryCode ? countryName(countryCode) : undefined,
     ].filter(Boolean).join(', ');
+    if (!requestedLocation || isCountryOnlyLocation(requestedLocation)) {
+      throw new SearchHttpError('Enter a city or postal code, not only a country.', 400);
+    }
 
     searchLock = await acquireOperationLock({
       userId: user.id,

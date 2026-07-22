@@ -26,7 +26,7 @@ export default async function LeadFile({
   const { data: lead } = await supabase
     .from("leads")
     .select(
-      "id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
+      "id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
     )
     .eq("id", id)
     .eq("workspace_id", user.workspaceId)
@@ -78,170 +78,71 @@ export default async function LeadFile({
       ? nextLeadResult.data
       : null;
 
-  const [{ data: messages }, outreachProfileResult] = await Promise.all([
+  const [{ data: messages }, { data: outreachProfile }] = await Promise.all([
     supabase
       .from("messages")
-      .select("id,channel,subject,body,status,created_at")
+      .select("id,channel,contact_channel,subject,body,status,direction,intent,parent_message_id,reply_summary,recommended_action,analysis_reasoning,copied_at,sent_at,created_at")
       .eq("lead_id", id)
       .eq("workspace_id", user.workspaceId)
       .order("created_at", { ascending: false })
-      .limit(40),
+      .limit(60),
     supabase
       .from("outreach_profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", user.workspaceId),
+      .select("service_description,typical_project_range,target_customer,outreach_style,base_location,preferred_channels")
+      .eq("workspace_id", user.workspaceId)
+      .eq("is_default", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  const profile = {
+    serviceDescription: outreachProfile?.service_description || "",
+    typicalProjectRange: outreachProfile?.typical_project_range || "",
+    targetCustomer: outreachProfile?.target_customer || "",
+    outreachStyle: outreachProfile?.outreach_style || "",
+    baseLocation: outreachProfile?.base_location || "",
+    preferredChannels: outreachProfile?.preferred_channels || "",
+  };
+  const profileComplete = [
+    profile.serviceDescription,
+    profile.typicalProjectRange,
+    profile.targetCustomer,
+    profile.outreachStyle,
+    profile.baseLocation,
+  ].every((value) => value.trim().length > 0);
 
   return (
     <AppShell admin={user.isAdmin}>
       <div className="lead-file-head">
         <div>
-          <Link className="back-link" href="/dashboard/leads">
-            ← Back to pipeline
-          </Link>
+          <Link className="back-link" href="/dashboard/leads">← Back to pipeline</Link>
           <div className="eyebrow">Opportunity file</div>
           <h2>{lead.name}</h2>
-          <p>
-            {lead.category || "Local business"} ·{" "}
-            {lead.address || [lead.city, lead.state].filter(Boolean).join(", ")}
-          </p>
+          <p>{lead.category || "Local business"} · {lead.address || [lead.city, lead.state].filter(Boolean).join(", ")}</p>
         </div>
-        <div className="lead-file-score">
-          <strong>{lead.opportunity_score ?? "—"}</strong>
-          <span>evidence score</span>
-        </div>
+        <div className="lead-file-score"><strong>{lead.opportunity_score ?? "—"}</strong><span>evidence score</span></div>
       </div>
 
       <div className="lead-summary-grid">
-        <div className="lead-fact">
-          <small>Current status</small>
-          <b>{String(lead.status).replaceAll("_", " ")}</b>
-        </div>
-        <div className="lead-fact">
-          <small>Google activity</small>
-          <b>
-            {lead.rating ?? "—"} rating · {lead.reviews || 0} reviews
-          </b>
-        </div>
-        <div className="lead-fact">
-          <small>Phone</small>
-          {lead.phone ? (
-            <a className="lead-phone-link" href={`tel:${lead.phone}`}>
-              {lead.phone}
-            </a>
-          ) : (
-            <b>Not listed</b>
-          )}
-        </div>
-        <div className="lead-fact">
-          <small>Website</small>
-          <b>{lead.website ? "Found" : "Not listed"}</b>
-        </div>
+        <div className="lead-fact"><small>Current status</small><b>{String(lead.status).replaceAll("_", " ")}</b></div>
+        <div className="lead-fact"><small>Google activity</small><b>{lead.rating ?? "—"} rating · {lead.reviews || 0} reviews</b></div>
+        <div className="lead-fact"><small>Phone</small>{lead.phone ? <a className="lead-phone-link" href={`tel:${lead.phone}`}>{lead.phone}</a> : <b>Not listed</b>}</div>
+        <div className="lead-fact"><small>Website</small><b>{lead.website ? "Found" : "Not listed"}</b></div>
       </div>
 
       <div className="lead-link-row">
-        <LeadAnalysisButton
-          leadId={lead.id}
-          hasAudit={Boolean(audit)}
-          initialRunning={
-            auditJob?.status === "queued" || auditJob?.status === "running"
-          }
-        />
-        {lead.website ? (
-          <a
-            className="btn"
-            href={lead.website}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open website
-          </a>
-        ) : null}
-        {lead.google_maps_url ? (
-          <a
-            className="btn"
-            href={lead.google_maps_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open Google listing
-          </a>
-        ) : null}
+        <LeadAnalysisButton leadId={lead.id} hasAudit={Boolean(audit)} initialRunning={auditJob?.status === "queued" || auditJob?.status === "running"} />
+        {lead.website ? <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a> : null}
+        {lead.google_maps_url ? <a className="btn" href={lead.google_maps_url} target="_blank" rel="noreferrer">Open Google listing</a> : null}
       </div>
 
       {lead.manual_review_required ? (
         <ManualReviewNotice
           leadId={lead.id}
-          reason={
-            lead.manual_review_reason ||
-            manualReviewFinding?.evidence ||
-            "Webvidence could not fully inspect this website."
-          }
+          reason={lead.manual_review_reason || manualReviewFinding?.evidence || "Webvidence could not fully inspect this website."}
         />
       ) : null}
-
-      <section className="evidence-file-section">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">Verified site evidence</div>
-            <h3>
-              {audit
-                ? `${findings?.length || 0} findings from ${audit.pages_crawled} checked page${audit.pages_crawled === 1 ? "" : "s"}`
-                : auditJob?.status === "queued" ||
-                    auditJob?.status === "running"
-                  ? "Website analysis is running"
-                  : "No website analysis yet"}
-            </h3>
-          </div>
-          {audit ? (
-            <span className="tag">{audit.status}</span>
-          ) : auditJob ? (
-            <span className="tag">{auditJob.status}</span>
-          ) : null}
-        </div>
-        {audit ? (
-          <>
-            <div className="audit-score-row">
-              <span>
-                Performance <b>{audit.performance_score ?? "—"}</b>
-              </span>
-              <span>
-                Accessibility <b>{audit.accessibility_score ?? "—"}</b>
-              </span>
-              <span>
-                SEO <b>{audit.seo_score ?? "—"}</b>
-              </span>
-              <span>
-                Best practices <b>{audit.best_practices_score ?? "—"}</b>
-              </span>
-            </div>
-            <div className="lead-findings">
-              {(findings || []).map((finding) => (
-                <article
-                  className={`lead-finding severity-${finding.severity}`}
-                  key={finding.id}
-                >
-                  <span>{finding.severity}</span>
-                  <div>
-                    <b>{finding.label}</b>
-                    <p>{finding.evidence}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div
-            className={`notice ${auditJob?.status === "failed" ? "notice-error" : ""}`}
-          >
-            {auditJob?.status === "queued" || auditJob?.status === "running"
-              ? "Analysis is running in the background. You can leave this page and return later."
-              : auditJob?.status === "failed"
-                ? `The analysis worker could not finish after ${auditJob.attempts || 1} attempt${auditJob.attempts === 1 ? "" : "s"}: ${auditJob.error_message || "Unknown processing error."}`
-                : "Run an analysis here to create verified findings before generating evidence-backed outreach."}
-          </div>
-        )}
-      </section>
 
       <OutreachComposer
         key={lead.id}
@@ -252,17 +153,60 @@ export default async function LeadFile({
         nextLeadName={nextLead?.name || null}
         initialStatus={lead.status || "new"}
         initialNotes={lead.notes || ""}
+        initialBusinessObservation={lead.business_observation || ""}
         initialFollowUpAt={toLocalInput(lead.next_follow_up_at)}
         initialFirstContactedAt={lead.first_contacted_at || ""}
         initialFollowUpStep={Number(lead.follow_up_step || 0)}
         initialFollowUpStoppedAt={lead.follow_up_stopped_at || ""}
         initialOutcome={(lead.lead_outcome || null) as LeadOutcome | null}
-        hasOutreachProfile={(outreachProfileResult.count || 0) > 0}
+        outreachProfile={profile}
+        profileComplete={profileComplete}
         initialMessages={(messages || []).map((message) => ({
           ...message,
           subject: message.subject || null,
+          contact_channel: message.contact_channel || null,
+          intent: message.intent || null,
+          parent_message_id: message.parent_message_id || null,
+          reply_summary: message.reply_summary || null,
+          recommended_action: message.recommended_action || null,
+          analysis_reasoning: message.analysis_reasoning || null,
+          copied_at: message.copied_at || null,
+          sent_at: message.sent_at || null,
         }))}
       />
+
+      <details className="evidence-file-section evidence-disclosure">
+        <summary>
+          <span><small>Business and website evidence</small><b>{audit ? `${findings?.length || 0} findings from ${audit.pages_crawled} checked page${audit.pages_crawled === 1 ? "" : "s"}` : auditJob?.status === "queued" || auditJob?.status === "running" ? "Website analysis is running" : "No website analysis yet"}</b></span>
+          <span className="tag">{audit?.status || auditJob?.status || "not analyzed"}</span>
+        </summary>
+        {audit ? (
+          <div className="evidence-disclosure-body">
+            <div className="audit-score-row">
+              <span>Performance <b>{audit.performance_score ?? "—"}</b></span>
+              <span>Accessibility <b>{audit.accessibility_score ?? "—"}</b></span>
+              <span>SEO <b>{audit.seo_score ?? "—"}</b></span>
+              <span>Best practices <b>{audit.best_practices_score ?? "—"}</b></span>
+            </div>
+            <div className="lead-findings">
+              {(findings || []).map((finding) => (
+                <article className={`lead-finding severity-${finding.severity}`} key={finding.id}>
+                  <span>{finding.severity}</span>
+                  <div><b>{finding.label}</b><p>{finding.evidence}</p></div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className={`notice ${auditJob?.status === "failed" ? "notice-error" : ""}`}>
+            {auditJob?.status === "queued" || auditJob?.status === "running"
+              ? "Analysis is running in the background. You can leave this page and return later."
+              : auditJob?.status === "failed"
+                ? `The analysis worker could not finish after ${auditJob.attempts || 1} attempt${auditJob.attempts === 1 ? "" : "s"}: ${auditJob.error_message || "Unknown processing error."}`
+                : "Run an analysis to create verified findings. Conversation-first outreach remains available without an audit."}
+          </div>
+        )}
+      </details>
     </AppShell>
   );
 }
