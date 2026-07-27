@@ -4105,3 +4105,134 @@ body:has(.send-confirm-layer) {
   border: 1px solid #2e3a42;
   background: #0f161a;
 }
+
+/* Website provenance and correction: compact by default, expanded only when needed. */
+.app-frame .lead-website-correction{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin:0 0 26px;
+  padding:13px 15px;
+  border:1px solid #2a3540;
+  background:#0d1318;
+}
+.app-frame .lead-website-correction.has-linked-website{
+  margin-top:-7px;
+  padding:10px 0 12px;
+  border-width:0 0 1px;
+  background:transparent;
+}
+.app-frame .lead-website-correction.missing-google-link{
+  border-left:3px solid var(--warning);
+}
+.app-frame .lead-website-correction-copy{
+  display:grid;
+  gap:4px;
+  min-width:0;
+}
+.app-frame .lead-website-correction-copy small{
+  color:#74808a;
+  font:800 8px var(--body);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.app-frame .lead-website-correction-copy b{
+  color:#e5ebef;
+  font-size:13px;
+}
+.app-frame .lead-website-correction-copy p{
+  max-width:720px;
+  margin:2px 0 0;
+  color:#87939d;
+  font-size:12px;
+  line-height:1.45;
+}
+.app-frame .lead-website-form{
+  display:grid;
+  grid-template-columns:minmax(260px,1fr) auto;
+  align-items:end;
+  gap:10px;
+  width:min(720px,100%);
+}
+.app-frame .lead-website-form label{
+  display:grid;
+  gap:7px;
+  min-width:0;
+  color:#7f8b96;
+  font:800 9px var(--body);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.app-frame .lead-website-form .input{
+  width:100%;
+  min-width:0;
+  text-transform:none;
+  letter-spacing:normal;
+}
+.app-frame .lead-website-form-actions{
+  display:flex;
+  gap:8px;
+}
+.app-frame .inline-action-success{
+  color:#8bd5d8;
+  font-size:11px;
+  line-height:1.4;
+}
+
+@media(max-width:760px){
+  .app-frame .lead-website-correction,
+  .app-frame .lead-website-correction.has-linked-website{
+    align-items:stretch;
+    flex-direction:column;
+    gap:11px;
+    margin-bottom:20px;
+    padding:13px;
+    border-width:1px;
+    background:#0d1318;
+  }
+  .app-frame .lead-website-correction>.btn{
+    width:100%;
+  }
+  .app-frame .lead-website-form{
+    grid-template-columns:1fr;
+  }
+  .app-frame .lead-website-form .input{
+    min-height:48px;
+    font-size:16px;
+  }
+  .app-frame .lead-website-form-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .app-frame .lead-website-form-actions .btn{
+    width:100%;
+  }
+}
+
+@media(max-width:390px){
+  .app-frame .lead-website-form-actions{
+    grid-template-columns:1fr;
+  }
+}
+
+/* Keep the expanded website editor inside narrow lead panels and mobile viewports. */
+.app-frame .lead-website-correction,
+.app-frame .lead-website-form,
+.app-frame .lead-website-form label,
+.app-frame .lead-website-form .input{
+  box-sizing:border-box;
+  min-width:0;
+  max-width:100%;
+}
+
+@media(max-width:760px){
+  .app-frame .lead-website-form{
+    width:100%;
+    max-width:100%;
+  }
+  .app-frame .lead-website-form label,
+  .app-frame .lead-website-form .input{
+    width:100%;
+  }
+}

@@ -38,6 +38,9 @@ type Lead = {
   city: string;
   state: string;
   website: string | null;
+  websiteSource?: string | null;
+  websiteVerificationStatus?: string | null;
+  websiteUpdatedByUserAt?: string | null;
   phone: string | null;
   reviews: number;
   rating: number | null;
@@ -618,7 +621,7 @@ export default function Campaigns() {
                     <span><b>{lead.rating ?? '—'}</b> rating</span>
                     <span><b>{lead.reviews}</b> reviews</span>
                     <span><b>{lead.phone || 'Not listed'}</b> phone</span>
-                    <span className={lead.website ? '' : 'fact-alert'}><b>{lead.website ? 'Website found' : 'No website'}</b></span>
+                    <span className={lead.website ? '' : 'fact-alert'}><b>{lead.website ? (lead.websiteSource === 'user' ? 'Website added by you' : 'Website linked on Google') : 'No website linked on Google'}</b></span>
                     {manualReview ? <span className="fact-review"><b>Manual review needed</b></span> : null}
                   </div>
 

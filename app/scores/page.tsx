@@ -71,7 +71,7 @@ export default function ScoresPage() {
           <article>
             <small>STARTING POINT</small>
             <h2>25 points when a website is present</h2>
-            <p>The audit starts at 25, then adds or removes points based on the findings. A business listing with no website receives a 94 because the missing website is already a clear opportunity.</p>
+            <p>The audit starts at 25, then adds or removes points based on the findings. When Google does not provide a website link, Webvidence uses a cautious score of 58. That is a reason to verify the listing, not proof that the business has no website or wants to buy one.</p>
           </article>
           <article>
             <small>FINAL RANGE</small>

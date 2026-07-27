@@ -53,14 +53,16 @@ Run these missing migrations in order, skipping any one you already successfully
 3. `supabase/004_functionality_upgrade.sql`
 4. `supabase/005_lead_priority_flow.sql`
 5. `supabase/006_feedback_submissions.sql`
+6. `supabase/007_conversation_workflow.sql`
+7. `supabase/008_website_verification.sql`
 
-For a current live project that already has migrations 003, 004, and 005, run only:
+For the current live project that already has migration 007, run only:
 
 ```text
-supabase/006_feedback_submissions.sql
+supabase/008_website_verification.sql
 ```
 
-Migrations 004, 005, and 006 are additive and preserve accounts, subscriptions, searches, leads, audits, messages, and usage. Back up `leads` and `messages` before applying any production migration.
+Migrations 004 through 008 are additive and preserve accounts, subscriptions, searches, leads, audits, messages, and usage. Migration 008 also corrects the wording and scores of older `no_site` audit results. Back up `leads`, `audits`, `audit_findings`, and `messages` before applying any production migration.
 
 ### Brand-new Supabase project
 
@@ -72,6 +74,8 @@ Run all migrations in order:
 4. `004_functionality_upgrade.sql`
 5. `005_lead_priority_flow.sql`
 6. `006_feedback_submissions.sql`
+7. `007_conversation_workflow.sql`
+8. `008_website_verification.sql`
 
 Configure Supabase Authentication URLs:
 
@@ -145,4 +149,4 @@ Private account, authentication, dashboard, and API routes are excluded from ind
 
 ## Focused conversation workflow deployment
 
-See `CURRENT_PRODUCT_INVENTORY.md` for the preserved-feature inventory and `CONVERSATION_WORKFLOW_UPDATE.md` for migration `007`, new routes, privacy details, AI data handling, and the manual test checklist.
+See `CURRENT_PRODUCT_INVENTORY.md` for the preserved-feature inventory, `CONVERSATION_WORKFLOW_UPDATE.md` for migration `007`, and `WEBSITE_TRUST_UPDATE.md` for migration `008` and the website-correction deployment checklist.

@@ -67,8 +67,8 @@ const sortOptions: Array<[SortKey, string]> = [
   ["oldest", "Oldest found"],
   ["recent_contact", "Most recently contacted"],
   ["follow_up", "Follow-up due first"],
-  ["no_website", "No website first"],
-  ["website", "Website found first"],
+  ["no_website", "No Google-linked website first"],
+  ["website", "Website linked first"],
   ["never_contacted", "Never contacted first"],
 ];
 

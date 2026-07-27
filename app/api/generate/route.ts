@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
     const { data: lead, error: leadError } = await db
       .from('leads')
-      .select('id,workspace_id,name,category,city,state,website,status,manual_review_required,notes,business_observation,follow_up_step')
+      .select('id,workspace_id,name,category,city,state,website,website_updated_by_user_at,status,manual_review_required,notes,business_observation,follow_up_step')
       .eq('id', input.leadId)
       .eq('workspace_id', user.workspaceId)
       .maybeSingle();
@@ -87,24 +87,28 @@ export async function POST(req: Request) {
 
     const { data: audit } = await db
       .from('audits')
-      .select('id')
+      .select('id,created_at')
       .eq('lead_id', lead.id)
       .eq('workspace_id', user.workspaceId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (input.intent === 'website_finding' && lead.website && !audit) {
+    const currentAudit = audit && (!lead.website_updated_by_user_at || Date.parse(audit.created_at) >= Date.parse(lead.website_updated_by_user_at))
+      ? audit
+      : null;
+
+    if (input.intent === 'website_finding' && lead.website && !currentAudit) {
       return NextResponse.json({ error: 'Analyze this website before using a website finding so the draft is grounded in verified evidence.' }, { status: 409 });
     }
 
-    const { data: findings } = audit
-      ? await db.from('audit_findings').select('code,label,severity,evidence,source_url,metadata').eq('audit_id', audit.id)
+    const { data: findings } = currentAudit
+      ? await db.from('audit_findings').select('code,label,severity,evidence,source_url,metadata').eq('audit_id', currentAudit.id)
       : { data: lead.website ? [] : [{
           code: 'no_site',
-          label: 'No website found',
-          severity: 'high',
-          evidence: 'The Google business listing does not include a website.',
+          label: 'No website linked on the Google listing',
+          severity: 'medium',
+          evidence: 'Google did not return a website for this business listing. The business may still have a website elsewhere.',
           source_url: null,
           metadata: {},
         }] };

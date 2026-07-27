@@ -27,6 +27,9 @@ type SavedLead = {
   city: string;
   state: string;
   website: string | null;
+  websiteSource?: 'google_places' | 'user';
+  websiteVerificationStatus?: 'google_linked' | 'user_confirmed' | 'not_linked';
+  websiteUpdatedByUserAt?: string | null;
   phone: string | null;
   reviews: number;
   rating: number | null;
@@ -403,6 +406,23 @@ async function saveBusinesses(options: {
   const saved: SavedLead[] = [];
 
   for (const business of options.businesses) {
+    const { data: existing } = await db
+      .from('leads')
+      .select('id,opportunity_score,status,website,website_source,website_verification_status,website_updated_by_user_at')
+      .eq('workspace_id', options.workspaceId)
+      .eq('google_place_id', business.id)
+      .maybeSingle();
+
+    const keepUserWebsite = existing?.website_source === 'user' && Boolean(existing.website);
+    const resolvedWebsite = keepUserWebsite ? existing.website : business.website;
+    const websiteSource = keepUserWebsite ? 'user' as const : 'google_places' as const;
+    const websiteVerificationStatus = keepUserWebsite
+      ? 'user_confirmed' as const
+      : resolvedWebsite
+        ? 'google_linked' as const
+        : 'not_linked' as const;
+    const websiteUpdatedByUserAt = keepUserWebsite ? existing.website_updated_by_user_at : null;
+
     const record = {
       workspace_id: options.workspaceId,
       campaign_id: options.campaignId,
@@ -417,7 +437,10 @@ async function saveBusinesses(options: {
       postal_code: business.postalCode,
       latitude: business.latitude,
       longitude: business.longitude,
-      website: business.website,
+      website: resolvedWebsite,
+      website_source: websiteSource,
+      website_verification_status: websiteVerificationStatus,
+      website_updated_by_user_at: websiteUpdatedByUserAt,
       phone: business.phone,
       google_maps_url: business.googleMapsUrl,
       reviews: business.reviews,
@@ -426,13 +449,6 @@ async function saveBusinesses(options: {
       raw_provider_data: { ...((business.raw as Record<string, unknown>) || {}), distanceMiles: business.distanceMiles },
       updated_at: new Date().toISOString(),
     };
-
-    const { data: existing } = await db
-      .from('leads')
-      .select('id,opportunity_score,status')
-      .eq('workspace_id', options.workspaceId)
-      .eq('google_place_id', business.id)
-      .maybeSingle();
 
     let leadId: string;
     let opportunityScore: number | null = existing?.opportunity_score ?? null;
@@ -459,7 +475,10 @@ async function saveBusinesses(options: {
       address: business.address,
       city: business.city,
       state: business.state,
-      website: business.website,
+      website: resolvedWebsite,
+      websiteSource,
+      websiteVerificationStatus,
+      websiteUpdatedByUserAt,
       phone: business.phone,
       reviews: business.reviews,
       rating: business.rating,
@@ -479,9 +498,16 @@ function prioritizeForAudit<T extends { website: string | null; reviews: number 
   resultMode: SearchResultMode,
 ) {
   return [...leads].sort((a, b) => {
-    if (!a.website && b.website) return -1;
-    if (a.website && !b.website) return 1;
-    if (resultMode === 'mixed' || resultMode === 'hidden') return a.reviews - b.reviews;
+    if (resultMode === 'hidden') {
+      if (!a.website && b.website) return -1;
+      if (a.website && !b.website) return 1;
+      return a.reviews - b.reviews;
+    }
+    // Actual website checks are more useful than spending the initial audit batch
+    // on listings where Google simply omitted the website field.
+    if (a.website && !b.website) return -1;
+    if (!a.website && b.website) return 1;
+    if (resultMode === 'mixed') return a.reviews - b.reviews;
     return b.reviews - a.reviews;
   });
 }

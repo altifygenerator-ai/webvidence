@@ -51,7 +51,7 @@ const MANUAL_REVIEW_CODES = new Set([
 ]);
 
 const FINDING_WEIGHT: Record<string, number> = {
-  no_site: 28,
+  no_site: 8,
   homepage_not_found: 24,
   homepage_http_error: 22,
   performance: 20,
@@ -107,7 +107,7 @@ export function getContactRecommendation<T extends RecommendationLead>(
 
   let rank = Math.max(0, Number(lead.opportunityScore || 0)) * 0.65;
   if (lead.audit && lead.auditStatus !== 'queued' && lead.auditStatus !== 'running') rank += 14;
-  if (!lead.website) rank += 24;
+  if (!lead.website) rank += 6;
   if (lead.phone) rank += 18;
   if (lead.googleMapsUrl) rank += 4;
   if (lead.website) rank += 2;
@@ -119,10 +119,10 @@ export function getContactRecommendation<T extends RecommendationLead>(
 
   const reason = getPlainLeadReason(lead, strongestFinding);
   const signals: string[] = [];
+  if (!lead.website) signals.push('No website linked on Google');
   if (lead.phone) signals.push('Phone available');
   if (reviews > 0) signals.push(`${reviews} review${reviews === 1 ? '' : 's'}`);
   if (lead.audit && usefulFindings.length > 0) signals.push('Completed check');
-  if (!lead.website) signals.push('No website listed');
 
   return {
     lead,
@@ -137,7 +137,7 @@ export function getPlainLeadReason(
   preferredFinding?: RecommendationFinding,
 ) {
   if (!lead.website) {
-    return 'No website is listed, so there is a clear and simple reason to take a closer look.';
+    return 'Google did not provide a website link, so this needs a quick check before assuming the business has no site.';
   }
 
   const finding =

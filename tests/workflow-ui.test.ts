@@ -58,11 +58,11 @@ describe('campaign and pipeline focus', () => {
 describe('mobile workflow', () => {
   it('renders one sticky primary action and safe mobile sheets', () => {
     const composer = source('components/outreach-composer.tsx');
-    const css = source('app/globals.css');
+    const css = source('app/application.css');
     expect(composer).toContain('mobile-outreach-dock');
     expect(composer).toContain('buildMobileAction');
     expect(css).toContain('safe-area-inset-bottom');
-    expect(css).toContain('max-height:88dvh');
+    expect(css).toContain('max-height: min(86dvh, 760px)');
     expect(css).toContain('font-size:16px');
     expect(css).toContain('@media(max-width:390px)');
   });

@@ -61,9 +61,9 @@ export async function auditWebsite(url: string | null, options?: { runPageSpeed?
   if (!url) {
     findings.push({
       code: 'no_site',
-      label: 'No website found',
-      severity: 'high',
-      evidence: 'The Google business listing does not include a website.',
+      label: 'No website linked on the Google listing',
+      severity: 'medium',
+      evidence: 'Google did not return a website for this business listing. The business may still have a website elsewhere.',
     });
     return finish({
       url: null,
@@ -455,7 +455,7 @@ function finish(input: {
     if (finding.severity === 'low') return total + 4;
     return total - 2;
   }, 0);
-  const score = Math.max(8, Math.min(98, input.url ? 25 + issuePoints : 94));
+  const score = Math.max(8, Math.min(98, input.url ? 25 + issuePoints : 58));
 
   return {
     score,

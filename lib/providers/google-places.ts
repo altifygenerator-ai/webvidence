@@ -251,7 +251,7 @@ function hiddenOpportunityScore(candidate: SearchCandidate, seed: string) {
   const business = candidate.business;
   let score = 0;
 
-  if (!business.website) score += 60;
+  if (!business.website) score += 24;
   if (business.reviews <= 5) score += 42;
   else if (business.reviews <= 20) score += 34;
   else if (business.reviews <= 50) score += 26;

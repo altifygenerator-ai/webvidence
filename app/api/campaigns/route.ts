@@ -4,6 +4,7 @@ import { getViewer } from '@/lib/security/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertTrustedMutation, RequestSecurityError } from '@/lib/security/request';
 import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/rate-limit';
+import { auditIsCurrentForWebsite } from '@/lib/leads/website';
 
 const patchSchema = z.object({
   campaignId: z.string().uuid(),
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
   if (!campaign) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
 
   const { data: leadRows, error: leadError } = await db.from('leads')
-    .select('id,google_place_id,name,category,address,city,state,website,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,updated_at')
+    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,updated_at')
     .eq('workspace_id', user.workspaceId)
     .eq('campaign_id', campaign.id)
     .neq('status', 'archived')
@@ -108,8 +109,14 @@ export async function GET(req: Request) {
   }
 
   const leads = (leadRows || []).map((lead) => {
-    const audit = latestAuditByLead.get(lead.id) || null;
-    const job = latestJobByLead.get(lead.id) || null;
+    const latestAudit = latestAuditByLead.get(lead.id) || null;
+    const audit = latestAudit && auditIsCurrentForWebsite(latestAudit.created_at, lead.website_updated_by_user_at)
+      ? latestAudit
+      : null;
+    const latestJob = latestJobByLead.get(lead.id) || null;
+    const job = latestJob && (!lead.website_updated_by_user_at || Date.parse(latestJob.created_at) >= Date.parse(lead.website_updated_by_user_at))
+      ? latestJob
+      : null;
     const raw = lead.raw_provider_data && typeof lead.raw_provider_data === 'object'
       ? lead.raw_provider_data as Record<string, unknown>
       : {};
@@ -132,6 +139,9 @@ export async function GET(req: Request) {
       city: lead.city || '',
       state: lead.state || '',
       website: lead.website,
+      websiteSource: lead.website_source,
+      websiteVerificationStatus: lead.website_verification_status,
+      websiteUpdatedByUserAt: lead.website_updated_by_user_at,
       phone: lead.phone,
       reviews: lead.reviews || 0,
       rating: lead.rating === null ? null : Number(lead.rating),

@@ -4,9 +4,11 @@ import { AppShell } from "@/components/app-shell";
 import { OutreachComposer } from "@/components/outreach-composer";
 import { ManualReviewNotice } from "@/components/manual-review-notice";
 import { LeadAnalysisButton } from "@/components/lead-analysis-button";
+import { LeadWebsiteEditor } from "@/components/lead-website-editor";
 import { requireViewer } from "@/lib/security/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isManualReviewFinding, type LeadOutcome } from "@/lib/leads/priority";
+import { auditIsCurrentForWebsite, websiteStatusLabel } from "@/lib/leads/website";
 
 export default async function LeadFile({
   params,
@@ -26,14 +28,14 @@ export default async function LeadFile({
   const { data: lead } = await supabase
     .from("leads")
     .select(
-      "id,name,category,address,city,state,website,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
+      "id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
     )
     .eq("id", id)
     .eq("workspace_id", user.workspaceId)
     .maybeSingle();
   if (!lead) notFound();
 
-  const { data: audit } = await supabase
+  const { data: auditRow } = await supabase
     .from("audits")
     .select(
       "id,status,score,website_url,final_url,http_status,page_title,meta_description,pages_crawled,performance_score,accessibility_score,seo_score,best_practices_score,created_at",
@@ -44,6 +46,10 @@ export default async function LeadFile({
     .limit(1)
     .maybeSingle();
 
+  const audit = auditRow && auditIsCurrentForWebsite(auditRow.created_at, lead.website_updated_by_user_at)
+    ? auditRow
+    : null;
+
   const { data: findings } = audit
     ? await supabase
         .from("audit_findings")
@@ -53,12 +59,16 @@ export default async function LeadFile({
 
   const { data: auditJob } = await supabase
     .from("audit_jobs")
-    .select("id,status,result_status,error_message,attempts,updated_at")
+    .select("id,status,result_status,error_message,attempts,created_at,updated_at")
     .eq("lead_id", id)
     .eq("workspace_id", user.workspaceId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const currentAuditJob = auditJob && (!lead.website_updated_by_user_at || Date.parse(auditJob.created_at) >= Date.parse(lead.website_updated_by_user_at))
+    ? auditJob
+    : null;
 
   const manualReviewFinding = (findings || []).find((finding) =>
     isManualReviewFinding(finding.code),
@@ -128,14 +138,23 @@ export default async function LeadFile({
         <div className="lead-fact"><small>Current status</small><b>{String(lead.status).replaceAll("_", " ")}</b></div>
         <div className="lead-fact"><small>Google activity</small><b>{lead.rating ?? "—"} rating · {lead.reviews || 0} reviews</b></div>
         <div className="lead-fact"><small>Phone</small>{lead.phone ? <a className="lead-phone-link" href={`tel:${lead.phone}`}>{lead.phone}</a> : <b>Not listed</b>}</div>
-        <div className="lead-fact"><small>Website</small><b>{lead.website ? "Found" : "Not listed"}</b></div>
+        <div className="lead-fact"><small>Website</small><b>{websiteStatusLabel({ website: lead.website, source: lead.website_source, verificationStatus: lead.website_verification_status })}</b></div>
       </div>
 
       <div className="lead-link-row">
-        <LeadAnalysisButton leadId={lead.id} hasAudit={Boolean(audit)} initialRunning={auditJob?.status === "queued" || auditJob?.status === "running"} />
+        {lead.website ? (
+          <LeadAnalysisButton key={currentAuditJob?.id || audit?.id || "no-audit"} leadId={lead.id} hasAudit={Boolean(audit)} initialRunning={currentAuditJob?.status === "queued" || currentAuditJob?.status === "running"} />
+        ) : null}
         {lead.website ? <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a> : null}
         {lead.google_maps_url ? <a className="btn" href={lead.google_maps_url} target="_blank" rel="noreferrer">Open Google listing</a> : null}
       </div>
+
+      <LeadWebsiteEditor
+        leadId={lead.id}
+        initialWebsite={lead.website || null}
+        source={lead.website_source || null}
+        verificationStatus={lead.website_verification_status || null}
+      />
 
       {lead.manual_review_required ? (
         <ManualReviewNotice
@@ -177,8 +196,8 @@ export default async function LeadFile({
 
       <details className="evidence-file-section evidence-disclosure">
         <summary>
-          <span><small>Business and website evidence</small><b>{audit ? `${findings?.length || 0} findings from ${audit.pages_crawled} checked page${audit.pages_crawled === 1 ? "" : "s"}` : auditJob?.status === "queued" || auditJob?.status === "running" ? "Website analysis is running" : "No website analysis yet"}</b></span>
-          <span className="tag">{audit?.status || auditJob?.status || "not analyzed"}</span>
+          <span><small>Business and website evidence</small><b>{audit ? `${findings?.length || 0} findings from ${audit.pages_crawled} checked page${audit.pages_crawled === 1 ? "" : "s"}` : currentAuditJob?.status === "queued" || currentAuditJob?.status === "running" ? "Website analysis is running" : "No website analysis yet"}</b></span>
+          <span className="tag">{audit?.status || currentAuditJob?.status || "not analyzed"}</span>
         </summary>
         {audit ? (
           <div className="evidence-disclosure-body">
@@ -198,11 +217,11 @@ export default async function LeadFile({
             </div>
           </div>
         ) : (
-          <div className={`notice ${auditJob?.status === "failed" ? "notice-error" : ""}`}>
-            {auditJob?.status === "queued" || auditJob?.status === "running"
+          <div className={`notice ${currentAuditJob?.status === "failed" ? "notice-error" : ""}`}>
+            {currentAuditJob?.status === "queued" || currentAuditJob?.status === "running"
               ? "Analysis is running in the background. You can leave this page and return later."
-              : auditJob?.status === "failed"
-                ? `The analysis worker could not finish after ${auditJob.attempts || 1} attempt${auditJob.attempts === 1 ? "" : "s"}: ${auditJob.error_message || "Unknown processing error."}`
+              : currentAuditJob?.status === "failed"
+                ? `The analysis worker could not finish after ${currentAuditJob?.attempts || 1} attempt${currentAuditJob?.attempts === 1 ? "" : "s"}: ${currentAuditJob?.error_message || "Unknown processing error."}`
                 : "Run an analysis to create verified findings. Conversation-first outreach remains available without an audit."}
           </div>
         )}

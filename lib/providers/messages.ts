@@ -207,7 +207,7 @@ export function plainFinding(finding: Pick<Finding, 'code' | 'label' | 'evidence
     missing_click_to_call: 'The phone number did not open the call screen on my phone.',
     broken_link: 'One of the links went to a page that was not there.',
     missing_mobile_viewport: 'The site was difficult to use on my phone.',
-    no_site: 'A website was not listed on the business profile.',
+    no_site: 'Google did not return a website link for the business listing.',
   };
   return exact[finding.code] || `${finding.label}: ${finding.evidence}`;
 }
