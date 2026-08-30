@@ -18,6 +18,19 @@ export const PRODUCT_EVENTS = [
   'proposal_recorded',
   'won_outcome_selected',
   'not_a_fit_outcome_selected',
+  'session_started',
+  'lead_work_started',
+  'lead_passed',
+  'first_send_confirmed',
+  'session_completed',
+  'routine_set',
+  'reminder_sent',
+  'returned_from_reminder',
+  'market_refreshed',
+  'new_prospects_surfaced',
+  'lead_contacted',
+  'follow_up_cleared',
+  'reply_recorded',
 ] as const;
 
 export type ProductEvent = (typeof PRODUCT_EVENTS)[number];

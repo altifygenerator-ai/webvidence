@@ -5,8 +5,14 @@ import { OutreachComposer } from "@/components/outreach-composer";
 import { ManualReviewNotice } from "@/components/manual-review-notice";
 import { LeadAnalysisButton } from "@/components/lead-analysis-button";
 import { LeadWebsiteEditor } from "@/components/lead-website-editor";
+import { LeadSessionBar } from "@/components/lead-session-bar";
+import { ContactPaths } from "@/components/contact-paths";
+import { ReminderReturnTracker } from "@/components/reminder-return-tracker";
+import { LeadReviewTracker } from "@/components/lead-review-tracker";
 import { requireViewer } from "@/lib/security/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getActiveSession } from "@/lib/retention/session";
 import { isManualReviewFinding, type LeadOutcome } from "@/lib/leads/priority";
 import { auditIsCurrentForWebsite, websiteStatusLabel } from "@/lib/leads/website";
 
@@ -15,15 +21,16 @@ export default async function LeadFile({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ queue?: string; source?: string }>;
+  searchParams: Promise<{ queue?: string; source?: string; session?: string; from?: string }>;
 }) {
   const user = await requireViewer();
   const { id } = await params;
-  const { queue, source } = await searchParams;
+  const { queue, source, session: requestedSessionId } = await searchParams;
   const queueIds = String(queue || "").split(",").filter(Boolean).slice(0, 10);
   const nextLeadId = queueIds[0] || null;
   const remainingQueue = queueIds.slice(1);
   const supabase = await createClient();
+  const admin = createAdminClient();
 
   const { data: lead } = await supabase
     .from("leads")
@@ -88,6 +95,45 @@ export default async function LeadFile({
       ? nextLeadResult.data
       : null;
 
+  const [sessionState, contactResult] = await Promise.all([
+    requestedSessionId ? getActiveSession(user.id, user.workspaceId || "") : Promise.resolve(null),
+    admin.from("lead_contact_paths")
+      .select("id,kind,value,url,source_url,verified_public")
+      .eq("lead_id", id)
+      .eq("workspace_id", user.workspaceId)
+      .order("kind", { ascending: true }),
+  ]);
+  const activeSession = sessionState?.id === requestedSessionId ? sessionState : null;
+  const sessionItems = activeSession?.items || [];
+  const currentSessionItem = sessionItems.find((item) => item.lead_id === id) || null;
+  const nextSessionItem = currentSessionItem
+    ? sessionItems.find((item) => item.position > currentSessionItem.position && ["pending", "working"].includes(item.status))
+      || sessionItems.find((item) => item.lead_id !== id && ["pending", "working"].includes(item.status))
+    : null;
+  const sessionWorkedCount = sessionItems.filter((item) => !["pending", "working"].includes(item.status)).length;
+  const contactPaths = contactResult.data || [];
+  const publicEmail = contactPaths.find((path) => path.kind === "email" && path.value)?.value || "";
+  const facebookUrl = contactPaths.find((path) => path.kind === "facebook" && path.url)?.url || null;
+  const formPath = contactPaths.find((path) => path.kind === "form" && path.url) || null;
+  const strongestFinding = (findings || []).find((finding) => finding.severity === "high" && !isManualReviewFinding(finding.code))
+    || (findings || []).find((finding) => finding.severity === "medium" && !isManualReviewFinding(finding.code))
+    || null;
+  const bestReachPath = publicEmail ? `Email: ${publicEmail}`
+    : facebookUrl ? "Facebook profile found"
+      : formPath ? (formPath.value || "Contact form found")
+        : lead.phone ? `Phone: ${lead.phone}`
+          : "No verified public contact path found yet";
+  const sessionSelectionReason = lead.status === "replied" || lead.status === "interested"
+    ? "A live conversation needs your attention."
+    : lead.next_follow_up_at && Date.parse(lead.next_follow_up_at) <= Date.now()
+      ? "A follow-up is due, so this is useful work to clear now."
+      : !lead.first_contacted_at
+        ? `This is an untouched prospect${lead.opportunity_score !== null ? ` with an evidence score of ${lead.opportunity_score}` : ""}.`
+        : "This prospect has a clear next action in your pipeline.";
+  const activitySummary = Number(lead.reviews || 0) > 0
+    ? `${lead.rating ?? "—"} rating from ${lead.reviews} review${Number(lead.reviews) === 1 ? "" : "s"}`
+    : "No Google review activity was available in the saved business record.";
+
   const [{ data: messages }, { data: outreachProfile }] = await Promise.all([
     supabase
       .from("messages")
@@ -124,6 +170,9 @@ export default async function LeadFile({
 
   return (
     <AppShell admin={user.isAdmin}>
+      <ReminderReturnTracker />
+      {!activeSession || !currentSessionItem ? <LeadReviewTracker leadId={lead.id} /> : null}
+      {activeSession && currentSessionItem ? <LeadSessionBar sessionId={activeSession.id} leadId={lead.id} position={currentSessionItem.position} targetSize={activeSession.target_size} workedCount={sessionWorkedCount} nextLeadHref={nextSessionItem ? `/dashboard/leads/${nextSessionItem.lead_id}?session=${activeSession.id}#outreach` : null} /> : null}
       <div className="lead-file-head">
         <div>
           <Link className="back-link" href="/dashboard/leads">← Back to pipeline</Link>
@@ -133,6 +182,16 @@ export default async function LeadFile({
         </div>
         <div className="lead-file-score"><strong>{lead.opportunity_score ?? "—"}</strong><span>evidence score</span></div>
       </div>
+
+      {activeSession && currentSessionItem ? (
+        <section className="session-prospect-brief" aria-label="Why this prospect is in your session">
+          <div><small>Why this prospect</small><b>{sessionSelectionReason}</b></div>
+          <div><small>Main opportunity</small><b>{strongestFinding?.label || (lead.website ? "Review the business and website evidence" : "No website was linked on Google")}</b></div>
+          <div><small>Business activity</small><b>{activitySummary}</b></div>
+          <div><small>Best way to reach them</small><b>{bestReachPath}</b></div>
+          <div className="session-prospect-next"><small>Main next action</small><b>{lead.status === "replied" || lead.status === "interested" ? "Review the conversation and choose the next response" : lead.next_follow_up_at && Date.parse(lead.next_follow_up_at) <= Date.now() ? "Prepare the due follow-up" : "Prepare a message/contact or mark Not a fit"}</b></div>
+        </section>
+      ) : null}
 
       <div className="lead-summary-grid">
         <div className="lead-fact"><small>Current status</small><b>{String(lead.status).replaceAll("_", " ")}</b></div>
@@ -148,6 +207,8 @@ export default async function LeadFile({
         {lead.website ? <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a> : null}
         {lead.google_maps_url ? <a className="btn" href={lead.google_maps_url} target="_blank" rel="noreferrer">Open Google listing</a> : null}
       </div>
+
+      <ContactPaths paths={contactPaths as Parameters<typeof ContactPaths>[0]["paths"]} />
 
       <LeadWebsiteEditor
         leadId={lead.id}
@@ -168,7 +229,10 @@ export default async function LeadFile({
         leadId={lead.id}
         leadName={lead.name}
         leadPhone={lead.phone || null}
-        nextLeadHref={nextLead ? `/dashboard/leads/${nextLead.id}?source=${source || "search"}${remainingQueue.length ? `&queue=${remainingQueue.join(",")}` : ""}#outreach` : null}
+        sessionId={activeSession?.id || null}
+        initialEmailRecipient={publicEmail}
+        facebookContactUrl={facebookUrl}
+        nextLeadHref={nextSessionItem && activeSession ? `/dashboard/leads/${nextSessionItem.lead_id}?session=${activeSession.id}#outreach` : nextLead ? `/dashboard/leads/${nextLead.id}?source=${source || "search"}${remainingQueue.length ? `&queue=${remainingQueue.join(",")}` : ""}#outreach` : null}
         nextLeadName={nextLead?.name || null}
         initialStatus={lead.status || "new"}
         initialNotes={lead.notes || ""}

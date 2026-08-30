@@ -21,6 +21,7 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional(),
   FEEDBACK_TO_EMAIL: z.preprocess((value) => value === '' ? undefined : value, z.string().email().optional()),
   FEEDBACK_FROM_EMAIL: z.string().min(3).default('Webvidence Feedback <feedback@webvidence.app>'),
+  REMINDER_FROM_EMAIL: z.string().min(3).default('Webvidence <reminders@webvidence.app>'),
   GOOGLE_GEOCODING_COST_PER_1000: z.coerce.number().nonnegative().default(5),
   GOOGLE_PLACES_TEXT_SEARCH_COST_PER_1000: z.coerce.number().nonnegative().default(32),
   PAGESPEED_COST_PER_1000: z.coerce.number().nonnegative().default(0),

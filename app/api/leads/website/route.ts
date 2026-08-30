@@ -57,6 +57,17 @@ export async function PATCH(req: Request) {
 
     await validatePublicUrl(normalizedWebsite);
 
+    // Clear discoveries before changing the canonical website. If this cleanup
+    // cannot be completed, do not leave the lead pointing at a new site while
+    // retaining contact data discovered from the old one.
+    const { error: contactClearError } = await db.from('lead_contact_paths')
+      .delete()
+      .eq('workspace_id', user.workspaceId)
+      .eq('lead_id', lead.id);
+    if (contactClearError) {
+      return NextResponse.json({ error: 'The existing contact paths could not be cleared safely.' }, { status: 500 });
+    }
+
     const now = new Date().toISOString();
     const nextStatus = EARLY_STATUSES.has(lead.status) ? 'reviewing' : lead.status;
     const { data: updated, error: updateError } = await db.from('leads')

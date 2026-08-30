@@ -9,7 +9,7 @@ import { absoluteUrl, publicMetadata, SITE_NAME, SITE_URL } from '@/lib/seo';
 
 export const metadata: Metadata = publicMetadata({
   title: 'Research Local Businesses and Prepare Better Web Design Outreach',
-  description: 'Research local businesses, decide who is worth contacting, and prepare grounded web design outreach without automatically sending anything.',
+  description: 'Build a repeatable local prospecting routine with prepared three-prospect sessions, public contact discovery, watched markets, follow-up reminders, and manual outreach.',
   path: '/',
 });
 
@@ -113,13 +113,13 @@ export default async function Home() {
         <section className="hero shell">
           <div className="hero-copy">
             <div className="section-code"><span>01</span> Built for freelance web developers</div>
-            <h1>Find businesses worth reviewing.</h1>
-            <p className="hero-lede">Search a trade and location. Webvidence brings in real businesses, checks public website evidence, and helps you decide who is worth contacting and how to start the conversation.</p>
+            <h1>Build a prospecting routine you can repeat.</h1>
+            <p className="hero-lede">Search a market once, then work short prepared sessions. Webvidence checks public website evidence and contact paths, keeps follow-ups organized, and can watch a market for fresh prospects.</p>
             <div className="hero-actions">
               <Link className="action primary" href={viewer ? '/dashboard/campaigns' : '/signup'}><span>{viewer ? 'Run a prospect search' : 'Try it free'}</span><b>↗</b></Link>
               <Link className="text-link" href="/#product-tour">See the app before signing up <span>↓</span></Link>
             </div>
-            <div className="hero-note"><b>No automatic sending.</b> You review the business, choose the approach, edit the draft, and stay in control.</div>
+            <div className="hero-note"><b>No mass-email automation.</b> Webvidence prepares the work and useful reminders. You choose the prospect, review the contact path, edit the draft, and send manually.</div>
           </div>
 
           <div className="hero-evidence-wrap">
@@ -153,9 +153,9 @@ export default async function Home() {
             <div className="product-tour-intro">
               <div>
                 <div className="section-code"><span>02</span> What you actually get</div>
-                <h2>From a location search to a usable prospect list.</h2>
+                <h2>From a location search to a repeatable working session.</h2>
               </div>
-              <p>This is the working part of Webvidence. Search a market, open one business, review the evidence, then choose whether to start a conversation, use a verified finding, or move on.</p>
+              <p>This is the working part of Webvidence. Search a market, then work one prepared prospect at a time: review, contact or pass, move to the next prospect, finish the session, and return when the next routine is ready.</p>
             </div>
 
             <div className="product-window" aria-label="Webvidence product preview">
@@ -203,13 +203,13 @@ export default async function Home() {
           <div className="workflow-intro">
             <div className="section-code"><span>03</span> The working session</div>
             <h2>The part between learning web development and landing the job.</h2>
-            <p>You already know how to build a site. Webvidence helps with the slower part: finding a market, checking businesses one at a time, and keeping the better opportunities organized.</p>
+            <p>You already know how to build a site. Webvidence helps with the slower part: preparing a small batch, finding real public contact paths, clearing follow-ups, watching a market for new businesses, and giving you a clean stopping point.</p>
             <div className="workflow-links"><Link href="/scores">What the scores mean</Link><Link href="/faq">Read the FAQ</Link></div>
           </div>
           <div className="workflow-board">
-            <article className="workflow-step offset-one"><span>01</span><div><small>SEARCH</small><h3>Pick a trade and location.</h3><p>Search by city, state or province, country, radius, category, review count, and website condition.</p></div></article>
-            <article className="workflow-step"><span>02</span><div><small>REVIEW</small><h3>See what the site is missing.</h3><p>Open factual findings from the homepage and a small sample of useful internal pages, plus mobile PageSpeed checks.</p></div></article>
-            <article className="workflow-step offset-two"><span>03</span><div><small>CONTACT</small><h3>Choose the right next move.</h3><p>Start a normal conversation, use one verified finding when it fits, record replies, and keep follow-up dates with the lead.</p></div></article>
+            <article className="workflow-step offset-one"><span>01</span><div><small>PREPARE</small><h3>Search once, then start a short session.</h3><p>Webvidence recommends one prospect first and prepares a three-prospect batch by default.</p></div></article>
+            <article className="workflow-step"><span>02</span><div><small>WORK</small><h3>Review, contact, or legitimately pass.</h3><p>Use verified website evidence and discovered public contact paths. Passing a poor fit still counts as useful progress.</p></div></article>
+            <article className="workflow-step offset-two"><span>03</span><div><small>RETURN</small><h3>Finish cleanly and know when to come back.</h3><p>Set your prospecting days and session size. Optional email reminders can bring you back for due follow-ups, fresh watched-market prospects, or unfinished work.</p></div></article>
           </div>
         </section>
 

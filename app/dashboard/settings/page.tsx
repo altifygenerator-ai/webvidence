@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { requireViewer } from '@/lib/security/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { RoutineSettingsForm } from '@/components/routine-settings-form';
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const user = await requireViewer();
@@ -14,6 +15,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     .eq('is_default', true)
     .order('updated_at', { ascending: false })
     .limit(1)
+    .maybeSingle();
+  const { data: routine } = await db.from('prospecting_routines')
+    .select('days_of_week,preferred_time,session_size,reminder_email_enabled,weekly_routine_enabled')
+    .eq('user_id', user.id)
+    .eq('workspace_id', user.workspaceId)
     .maybeSingle();
 
   async function save(formData: FormData) {
@@ -62,6 +68,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <label><span>Your natural outreach style</span><textarea className="input" name="outreachStyle" rows={6} defaultValue={profile?.outreach_style || ''} placeholder="Plainspoken, local, short, one real observation, one question, no immediate hard pitch." /></label>
         <button className="btn primary">Save outreach profile</button>
       </form>
+      <section className="settings-routine-section">
+        <RoutineSettingsForm initialRoutine={routine} />
+      </section>
     </AppShell>
   );
 }

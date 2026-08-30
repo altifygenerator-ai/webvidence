@@ -36,10 +36,10 @@ describe('focused lead workflow', () => {
 describe('campaign and pipeline focus', () => {
   it('presents recommendations as businesses to review, not guaranteed buyers', () => {
     const page = source('app/dashboard/campaigns/page.tsx');
-    expect(page).toContain('Best places to review first');
-    expect(page).toContain('Based on the available business details');
+    expect(page).toContain('Your first prospect is ready');
+    expect(page).toContain('Webvidence picked the strongest next action');
     expect(page).toContain("item.signals.slice(0, 2)");
-    expect(page).toContain('Review business');
+    expect(page).toContain('Open details');
     expect(page).not.toContain('Best places to start');
   });
 

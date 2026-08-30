@@ -11,7 +11,7 @@ import { absoluteUrl, publicMetadata, SITE_URL } from '@/lib/seo';
 
 export const metadata: Metadata = publicMetadata({
   title: 'Pricing for Freelance Web Designers',
-  description: 'Start free with local business searches and website analyses, or try the Freelancer plan free for 7 days with a card. Paid plans start at $19 per month.',
+  description: 'Start free with local business searches, prepared prospecting sessions, one watched market, public contact discovery, and optional routine reminders. Paid plans start at $19 per month.',
   path: '/pricing',
   keywords: [
     'Webvidence pricing',
@@ -112,6 +112,10 @@ export default async function Pricing({
                   <li>{plan.audits} analyzed prospects</li>
                   <li>{plan.messages} outreach drafts</li>
                   <li>{plan.campaigns} active campaigns</li>
+                  <li>Prepared prospecting sessions</li>
+                  <li>{id === 'free' ? '1 watched market' : 'Watched markets feed Today'}</li>
+                  <li>Public contact-path discovery</li>
+                  <li>Follow-up and routine reminders</li>
                   <li>{plan.saved} saved leads</li>
                   <li>{plan.exports ? 'CSV export' : 'No bulk export'}</li>
                 </ul>

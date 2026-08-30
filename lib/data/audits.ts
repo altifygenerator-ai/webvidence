@@ -73,6 +73,30 @@ export async function saveLeadAudit(options: {
     if (findingsError) throw new Error(`Could not save audit findings: ${findingsError.message}`);
   }
 
+  // Public contact discoveries are deliberately kept out of audit.raw and the
+  // browser-readable audit payloads. Replace them as a set so a corrected site
+  // cannot leave stale email/social/form information behind.
+  const { error: deleteContactError } = await db.from('lead_contact_paths')
+    .delete()
+    .eq('workspace_id', workspaceId)
+    .eq('lead_id', leadId);
+  if (deleteContactError) throw new Error(`Could not refresh contact paths: ${deleteContactError.message}`);
+
+  if (audit.contactPaths.length) {
+    const { error: contactError } = await db.from('lead_contact_paths').insert(
+      audit.contactPaths.map((contact) => ({
+        workspace_id: workspaceId,
+        lead_id: leadId,
+        kind: contact.kind,
+        value: contact.value,
+        url: contact.url,
+        source_url: contact.sourceUrl,
+        verified_public: true,
+      })),
+    );
+    if (contactError) throw new Error(`Could not save public contact paths: ${contactError.message}`);
+  }
+
   const { data: currentLead, error: currentLeadError } = await db
     .from('leads')
     .select('status')
@@ -116,8 +140,9 @@ export async function saveLeadAudit(options: {
     if (jobUpdateError) throw new Error(`Could not finish audit job: ${jobUpdateError.message}`);
   }
 
+  const { contactPaths: _privateContactPaths, ...publicAudit } = audit;
   return {
-    ...audit,
+    ...publicAudit,
     id: saved.id,
     jobId,
     score: opportunityScore,

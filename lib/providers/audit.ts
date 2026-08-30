@@ -11,6 +11,13 @@ export type Finding = {
   metadata?: Record<string, unknown>;
 };
 
+export type PublicContactPath = {
+  kind: 'email' | 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'youtube' | 'form' | 'phone';
+  value: string | null;
+  url: string | null;
+  sourceUrl: string;
+};
+
 export type WebsiteAudit = {
   score: number;
   findings: Finding[];
@@ -26,6 +33,7 @@ export type WebsiteAudit = {
   seoScore: number | null;
   bestPracticesScore: number | null;
   raw: Record<string, unknown>;
+  contactPaths: PublicContactPath[];
 };
 
 type AccessIssue = {
@@ -471,6 +479,7 @@ function finish(input: {
     accessibilityScore: input.pageSpeed?.accessibility ?? null,
     seoScore: input.pageSpeed?.seo ?? null,
     bestPracticesScore: input.pageSpeed?.bestPractices ?? null,
+    contactPaths: discoverPublicContactPaths(input.pages),
     raw: {
       pages: input.pages.map((page) => ({
         requestedUrl: page.requestedUrl,
@@ -522,6 +531,86 @@ async function fetchPageSnapshot(initialUrl: URL): Promise<PageSnapshot> {
     accessBlocked,
     accessReason,
   };
+}
+
+export function discoverPublicContactPaths(pages: Array<Pick<PageSnapshot, 'html' | 'finalUrl' | 'accessBlocked'>>): PublicContactPath[] {
+  const found = new Map<string, PublicContactPath>();
+
+  const add = (path: PublicContactPath) => {
+    const key = `${path.kind}:${path.value || ''}:${path.url || ''}`;
+    if (!found.has(key)) found.set(key, path);
+  };
+
+  for (const page of pages) {
+    if (page.accessBlocked || !page.html) continue;
+    const sourceUrl = page.finalUrl;
+    const html = decodeEntities(page.html);
+
+    for (const match of html.matchAll(/href\s*=\s*["']mailto:([^"'?#\s]+)(?:\?[^"']*)?["']/gi)) {
+      const email = normalizePublicEmail(match[1]);
+      if (email) add({ kind: 'email', value: email, url: `mailto:${email}`, sourceUrl });
+    }
+    // Search visible markup for plain-text addresses, but ignore script/style payloads
+    // where vendor bundles and monitoring configuration can contain unrelated emails.
+    const publicMarkup = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ');
+    for (const match of publicMarkup.matchAll(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi)) {
+      const email = normalizePublicEmail(match[0]);
+      if (email) add({ kind: 'email', value: email, url: `mailto:${email}`, sourceUrl });
+    }
+    for (const match of html.matchAll(/href\s*=\s*["']tel:([^"']+)["']/gi)) {
+      const raw = match[1].trim();
+      const normalized = raw.replace(/[^\d+]/g, '');
+      if (normalized.replace(/\D/g, '').length >= 7) add({ kind: 'phone', value: raw, url: `tel:${normalized}`, sourceUrl });
+    }
+
+    const anchors = html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi);
+    for (const match of anchors) {
+      try {
+        const url = new URL(match[1], sourceUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) continue;
+        const host = url.hostname.toLowerCase().replace(/^www\./, '');
+        const path = url.pathname.toLowerCase();
+        if (host === 'facebook.com' || host.endsWith('.facebook.com')) {
+          if (!/(sharer|share\.php|dialog)/.test(path)) add({ kind: 'facebook', value: null, url: url.toString(), sourceUrl });
+        } else if (host === 'instagram.com' || host.endsWith('.instagram.com')) {
+          add({ kind: 'instagram', value: null, url: url.toString(), sourceUrl });
+        } else if (host === 'linkedin.com' || host.endsWith('.linkedin.com')) {
+          if (!/\/sharing\//.test(path)) add({ kind: 'linkedin', value: null, url: url.toString(), sourceUrl });
+        } else if (host === 'tiktok.com' || host.endsWith('.tiktok.com')) {
+          add({ kind: 'tiktok', value: null, url: url.toString(), sourceUrl });
+        } else if (host === 'youtube.com' || host === 'youtu.be' || host.endsWith('.youtube.com')) {
+          add({ kind: 'youtube', value: null, url: url.toString(), sourceUrl });
+        }
+      } catch {
+        // Ignore malformed public links.
+      }
+    }
+
+    if (/<form\b/i.test(html)) {
+      const pagePath = new URL(sourceUrl).pathname.toLowerCase();
+      const likelyContactForm = /(contact|quote|estimate|book|appointment|schedule|request)/.test(pagePath)
+        || /<form\b[\s\S]{0,1200}(contact|quote|estimate|book|appointment|schedule|request)/i.test(html);
+      if (likelyContactForm) {
+        const formContext = `${pagePath} ${html.slice(0, 5000)}`.toLowerCase();
+        const formLabel = /(quote|estimate)/.test(formContext) ? 'Quote form'
+          : /(book|appointment|schedule)/.test(formContext) ? 'Booking form'
+            : 'Contact form';
+        add({ kind: 'form', value: formLabel, url: sourceUrl, sourceUrl });
+      }
+    }
+  }
+
+  return Array.from(found.values()).slice(0, 30);
+}
+
+function normalizePublicEmail(value: string) {
+  const email = value.trim().replace(/^mailto:/i, '').toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  if (/(example\.com|example\.org|domain\.com|email\.com|sentry\.io)$/i.test(email)) return null;
+  if (/^(noreply|no-reply|donotreply)@/i.test(email)) return null;
+  return email.slice(0, 254);
 }
 
 export function detectAutomatedAccessBlock(status: number, html: string, headers?: Headers) {

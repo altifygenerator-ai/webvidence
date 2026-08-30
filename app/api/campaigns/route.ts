@@ -54,7 +54,7 @@ export async function GET(req: Request) {
   if (!campaign) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
 
   const { data: leadRows, error: leadError } = await db.from('leads')
-    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,updated_at')
+    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,passed_at,pass_reason,updated_at')
     .eq('workspace_id', user.workspaceId)
     .eq('campaign_id', campaign.id)
     .neq('status', 'archived')
@@ -149,6 +149,8 @@ export async function GET(req: Request) {
       distanceMiles,
       opportunityScore: lead.opportunity_score,
       status: lead.status,
+      passedAt: lead.passed_at,
+      passReason: lead.pass_reason,
       auditStatus,
       auditJobId: job?.id || null,
       auditError: job?.error_message || null,
@@ -185,6 +187,12 @@ export async function PATCH(req: Request) {
       .select('id,name,category,location,radius_miles,status,created_at,updated_at')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (input.status === 'archived') {
+      await db.from('watched_markets')
+        .delete()
+        .eq('campaign_id', input.campaignId)
+        .eq('workspace_id', user.workspaceId);
+    }
     return NextResponse.json({ campaign: data });
   } catch (error) {
     if (error instanceof RateLimitError) return NextResponse.json({ error: error.message }, { status: 429, headers: { 'retry-after': String(error.retryAfter) } });

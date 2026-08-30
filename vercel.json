@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/audits",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/retention",
+      "schedule": "0 * * * *"
     }
   ]
 }

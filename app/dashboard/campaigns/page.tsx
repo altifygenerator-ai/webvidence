@@ -48,6 +48,8 @@ type Lead = {
   distanceMiles: number | null;
   opportunityScore: number | null;
   status?: string;
+  passedAt?: string | null;
+  passReason?: string | null;
   audit: Audit | null;
   auditStatus?: 'queued' | 'running' | 'completed' | 'failed' | 'limit_reached';
   auditJobId?: string | null;
@@ -71,11 +73,6 @@ type UsageSummary = {
   limits: { search: number; audit: number; message: number };
 };
 
-type MomentumSummary = {
-  sentToday: number;
-  sentThisWeek: number;
-};
-
 type SearchResponse = {
   mode?: 'demo' | 'live';
   count?: number;
@@ -85,6 +82,7 @@ type SearchResponse = {
   leads?: Lead[];
   center?: { formattedAddress?: string };
   auditJobIds?: string[];
+  campaignId?: string;
 };
 
 export default function Campaigns() {
@@ -107,12 +105,11 @@ export default function Campaigns() {
   const [openingCampaignId, setOpeningCampaignId] = useState('');
   const [openedCampaign, setOpenedCampaign] = useState<Campaign | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [momentum, setMomentum] = useState<MomentumSummary>({ sentToday: 0, sentThisWeek: 0 });
-  const [dailyTarget, setDailyTarget] = useState(() => {
-    if (typeof window === 'undefined') return 5;
-    const saved = Number(window.sessionStorage.getItem('webvidence:daily-outreach-target') || 5);
-    return Number.isFinite(saved) ? Math.max(5, saved) : 5;
-  });
+  const [watchedCampaignIds, setWatchedCampaignIds] = useState<Set<string>>(new Set());
+  const [watchedFreeLimit, setWatchedFreeLimit] = useState<number | null>(null);
+  const [watchLoading, setWatchLoading] = useState('');
+  const [sessionLoading, setSessionLoading] = useState(false);
+
 
   function toggleCampaignManager() {
     setCampaignManagerOpen((current) => {
@@ -124,25 +121,18 @@ export default function Campaigns() {
 
   useEffect(() => {
     let active = true;
-    const offset = new Date().getTimezoneOffset();
-    void Promise.all([
-      fetch('/api/campaigns'),
-      fetch('/api/usage'),
-      fetch(`/api/outreach-momentum?tzOffset=${offset}`, { cache: 'no-store' }),
-    ])
-      .then(async ([campaignResponse, usageResponse, momentumResponse]) => {
+    void Promise.all([fetch('/api/campaigns'), fetch('/api/usage'), fetch('/api/watched-markets', { cache: 'no-store' })])
+      .then(async ([campaignResponse, usageResponse, watchedResponse]) => {
         const campaignData = await campaignResponse.json();
         const usageData = await usageResponse.json();
-        const momentumData = await momentumResponse.json();
+        const watchedData = await watchedResponse.json();
         if (!campaignResponse.ok) throw new Error(campaignData.error || 'Could not load campaigns.');
         if (!usageResponse.ok) throw new Error(usageData.error || 'Could not load usage.');
         if (active) {
-          setCampaigns(campaignData.campaigns || []);
-          setUsage(usageData);
-          if (momentumResponse.ok) {
-            const sentToday = Number(momentumData.sentToday || 0);
-            setMomentum({ sentToday, sentThisWeek: Number(momentumData.sentThisWeek || 0) });
-            setDailyTarget((current) => Math.max(current, Math.ceil(Math.max(1, sentToday) / 5) * 5));
+          setCampaigns(campaignData.campaigns || []); setUsage(usageData);
+          if (watchedResponse.ok) {
+            setWatchedCampaignIds(new Set((watchedData.watchedMarkets || []).map((item: { campaign_id: string }) => item.campaign_id)));
+            setWatchedFreeLimit(watchedData.freeLimit ?? null);
           }
         }
       })
@@ -194,22 +184,28 @@ export default function Campaigns() {
     if (response.ok) setUsage(await response.json());
   }
 
-  async function refreshMomentum() {
-    const offset = new Date().getTimezoneOffset();
-    const response = await fetch(`/api/outreach-momentum?tzOffset=${offset}`, { cache: 'no-store' });
-    if (!response.ok) return;
-    const data = await response.json();
-    const sentToday = Number(data.sentToday || 0);
-    setMomentum({ sentToday, sentThisWeek: Number(data.sentThisWeek || 0) });
-    setDailyTarget((current) => Math.max(current, Math.ceil(Math.max(1, sentToday) / 5) * 5));
+  async function toggleWatch(campaignId: string) {
+    const watched = watchedCampaignIds.has(campaignId);
+    setWatchLoading(campaignId); setError('');
+    try {
+      const response = await fetch('/api/watched-markets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ campaignId, action: watched ? 'unwatch' : 'watch' }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update watched market.');
+      setWatchedCampaignIds((current) => { const next = new Set(current); watched ? next.delete(campaignId) : next.add(campaignId); return next; });
+      setNotice(watched ? 'Market removed from watch.' : 'Market is watched. Fresh unseen prospects can feed future Today sessions.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not update watched market.'); } finally { setWatchLoading(''); }
   }
 
-  function addThreeMore() {
-    setDailyTarget((current) => {
-      const next = Math.max(current, momentum.sentToday) + 3;
-      window.sessionStorage.setItem('webvidence:daily-outreach-target', String(next));
-      return next;
-    });
+  async function startSession(source: 'search' | 'today' = 'search') {
+    setSessionLoading(true); setError('');
+    try {
+      const response = await fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not prepare a session.');
+      if (data.href) { window.location.assign(data.href); return; }
+      setSessionLoading(false);
+      setNotice('No unworked prospects are ready yet.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not prepare a session.'); setSessionLoading(false); }
   }
 
   async function openCampaign(campaign: Campaign) {
@@ -244,6 +240,10 @@ export default function Campaigns() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not update campaign.');
       setCampaigns((current) => current.map((campaign) => campaign.id === campaignId ? data.campaign : campaign));
+      if (status === 'archived' && watchedCampaignIds.has(campaignId)) {
+        await fetch('/api/watched-markets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ campaignId, action: 'unwatch' }) }).catch(() => undefined);
+        setWatchedCampaignIds((current) => { const next = new Set(current); next.delete(campaignId); return next; });
+      }
       setNotice(status === 'archived' ? 'Campaign archived. That active campaign slot is available again.' : `Campaign marked ${status}.`);
     } catch (campaignError) {
       setError(campaignError instanceof Error ? campaignError.message : 'Could not update campaign.');
@@ -265,6 +265,15 @@ export default function Campaigns() {
       setSearchGuidance('Enter a city or postal code, not only a country.');
       return;
     }
+    let usageBeforeSearch = usage;
+    if (!usageBeforeSearch) {
+      const usageResponse = await fetch('/api/usage', { cache: 'no-store' }).catch(() => null);
+      if (usageResponse?.ok) {
+        usageBeforeSearch = await usageResponse.json() as UsageSummary;
+        setUsage(usageBeforeSearch);
+      }
+    }
+    const isFirstSearch = Boolean(usageBeforeSearch && Number(usageBeforeSearch.usage.search || 0) === 0);
     setSearchGuidance('');
     setLoading(true);
     setLoadingStage('Locating the market…');
@@ -298,7 +307,10 @@ export default function Campaigns() {
       setNotice(json.warning || json.auditWarning || `${json.count || 0} businesses found near ${json.center?.formattedAddress || 'that location'}.`);
       const campaignResponse = await fetch('/api/campaigns');
       if (campaignResponse.ok) { const campaignJson = await campaignResponse.json(); setCampaigns(campaignJson.campaigns || []); }
-      await Promise.all([refreshUsage(), refreshMomentum()]);
+      await refreshUsage();
+      if (isFirstSearch && json.mode === 'live' && (json.leads?.length || 0) > 0) {
+        await startSession('search');
+      }
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : 'Search failed.');
     } finally {
@@ -329,7 +341,7 @@ export default function Campaigns() {
     } catch (auditError) {
       setError(auditError instanceof Error ? auditError.message : 'Analysis failed.');
     } finally {
-      await Promise.all([refreshUsage(), refreshMomentum()]);
+      await refreshUsage();
       setAuditingId('');
     }
   }
@@ -352,8 +364,6 @@ export default function Campaigns() {
   );
   const recommendationIds = new Set(recommendations.map((item) => item.lead.id));
   const pendingRecommendationChecks = leads.filter(isRecommendationPending).length;
-  const targetComplete = momentum.sentToday >= dailyTarget;
-  const remainingInTarget = Math.max(0, dailyTarget - momentum.sentToday);
 
   return (
     <AppShell>
@@ -395,6 +405,7 @@ export default function Campaigns() {
                     <div className="campaign-actions">
                       <button className="btn" type="button" onClick={() => void openCampaign(campaign)} disabled={openingCampaignId === campaign.id}>{openingCampaignId === campaign.id ? 'Opening…' : 'Open results'}</button>
                       <button className="btn" type="button" onClick={() => void updateCampaign(campaign.id, campaign.status === 'paused' ? 'active' : 'paused')} disabled={campaignLoading === campaign.id}>{campaign.status === 'paused' ? 'Resume' : 'Pause'}</button>
+                      <button className="btn" type="button" onClick={() => void toggleWatch(campaign.id)} disabled={watchLoading === campaign.id || (!watchedCampaignIds.has(campaign.id) && watchedFreeLimit === 1 && watchedCampaignIds.size >= 1)}>{watchLoading === campaign.id ? 'Saving…' : watchedCampaignIds.has(campaign.id) ? 'Watching ✓' : 'Watch market'}</button>
                       <button className="btn" type="button" onClick={() => void updateCampaign(campaign.id, 'archived')} disabled={campaignLoading === campaign.id}>{campaignLoading === campaign.id ? 'Saving…' : 'Archive'}</button>
                     </div>
                   </article>
@@ -521,16 +532,10 @@ export default function Campaigns() {
             <div className="start-here-head">
               <div>
                 <div className="eyebrow">Start here</div>
-                <h4>{recommendations.length ? 'Best places to review first' : pendingRecommendationChecks ? 'Finding the best places to review first…' : 'No clear recommendation yet'}</h4>
-                <p className="start-here-support">Based on the available business details, contact options, website evidence, and your previous activity.</p>
+                <h4>{recommendations.length ? 'Your first prospect is ready' : pendingRecommendationChecks ? 'Finding your first prospect…' : 'No clear recommendation yet'}</h4>
+                <p className="start-here-support">Webvidence picked the strongest next action from the available business details, contact options, website evidence, and your previous activity.</p>
               </div>
-              <div className="outreach-progress-compact">
-                <b>{momentum.sentToday} of {dailyTarget}</b>
-                <span>contacted today</span>
-              </div>
-            </div>
-            <div className="outreach-progress-track" aria-hidden="true">
-              <i style={{ width: `${Math.min(100, (momentum.sentToday / Math.max(1, dailyTarget)) * 100)}%` }} />
+              <button className="btn primary" type="button" disabled={sessionLoading} onClick={() => void startSession('search')}>{sessionLoading ? 'Preparing…' : recommendations.length ? 'Work this prospect' : 'Start session'}</button>
             </div>
 
             {recommendations.length ? (
@@ -576,14 +581,7 @@ export default function Campaigns() {
               </div>
             )}
 
-            {targetComplete ? (
-              <div className="batch-complete-row">
-                <span><b>Good stopping point.</b> You contacted {momentum.sentToday} business{momentum.sentToday === 1 ? '' : 'es'} today.</span>
-                <button className="btn" type="button" onClick={addThreeMore}>Add 3 more</button>
-              </div>
-            ) : (
-              <small className="batch-helper">{remainingInTarget} left in this batch. Stop whenever the work is no longer useful.</small>
-            )}
+            <small className="batch-helper">A reviewed and legitimately passed prospect counts too. Work the prepared batch, then stop cleanly.</small>
           </section>
 
           <div className="all-results-heading">
@@ -593,6 +591,7 @@ export default function Campaigns() {
 
           <div className="prospect-list">
             {leads.map((lead, index) => {
+              const passed = Boolean(lead.passedAt);
               const contacted = isContactedLead(lead.status);
               const manualReview = Boolean(lead.audit?.findings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code)));
               const plainReason = manualReview
@@ -600,14 +599,14 @@ export default function Campaigns() {
                 : getPlainLeadReason(lead);
               const nextLeadIds = recommendations.filter((item) => item.lead.id !== lead.id).map((item) => item.lead.id);
               return (
-              <article className={`prospect-card ${contacted ? 'prospect-contacted' : ''} ${recommendationIds.has(lead.id) ? 'prospect-recommended' : ''}`} key={lead.id}>
+              <article className={`prospect-card ${contacted || passed ? 'prospect-contacted' : ''} ${recommendationIds.has(lead.id) ? 'prospect-recommended' : ''}`} key={lead.id}>
                 <div className="prospect-index">{String(index + 1).padStart(2, '0')}</div>
                 <div className="prospect-main">
                   <div className="prospect-titleline">
                     <div>
                       <small>{lead.category || 'Local business'} · {lead.distanceMiles ?? '?'} miles</small>
-                      {contacted ? <span className="contacted-badge">{formatLeadStatus(lead.status)}</span> : null}
-                      {recommendationIds.has(lead.id) && !contacted ? <span className="recommended-badge">Recommended</span> : null}
+                      {passed ? <span className="contacted-badge">Passed</span> : contacted ? <span className="contacted-badge">{formatLeadStatus(lead.status)}</span> : null}
+                      {recommendationIds.has(lead.id) && !contacted && !passed ? <span className="recommended-badge">Recommended</span> : null}
                       <h3>{lead.name}</h3>
                       <p>{lead.address || [lead.city, lead.state].filter(Boolean).join(', ')}</p>
                     </div>
@@ -662,7 +661,7 @@ export default function Campaigns() {
 
                   <div className="prospect-actions">
                     {lead.audit ? (
-                      <Link className="btn primary outreach-link" href={buildLeadHref(lead.id, nextLeadIds)}>{contacted ? 'Open contacted lead' : manualReview ? 'Review manually' : 'Review and draft'}</Link>
+                      <Link className={`btn outreach-link ${passed ? '' : 'primary'}`} href={buildLeadHref(lead.id, nextLeadIds)}>{passed ? 'Open passed lead' : contacted ? 'Open contacted lead' : manualReview ? 'Review manually' : 'Review and draft'}</Link>
                     ) : (
                       <button className="btn primary" onClick={() => analyze(lead.id)} disabled={auditingId === lead.id || lead.auditStatus === 'queued' || lead.auditStatus === 'running'}>
                         {auditingId === lead.id || lead.auditStatus === 'queued' || lead.auditStatus === 'running'
@@ -705,7 +704,7 @@ function RecommendationRow({
         {item.signals.length ? <small>{item.signals.slice(0, 2).join(' · ')}</small> : null}
       </div>
       <Link className="btn primary" href={buildLeadHref(item.lead.id, nextLeadIds)} onClick={() => void recordRecommendedOpen(item.lead.id)}>
-        Review business
+        Open details
       </Link>
     </article>
   );
