@@ -26,8 +26,6 @@ type Lead = {
   priority_action?: PriorityAction | null;
   manual_review_required?: boolean;
   manual_review_reason?: string | null;
-  passed_at?: string | null;
-  pass_reason?: string | null;
 };
 
 export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boolean }) {
@@ -123,14 +121,12 @@ export function LeadsTable({ leads, archived }: { leads: Lead[]; archived: boole
 }
 
 function formatStatus(lead: Lead) {
-  if (lead.passed_at) return "Passed";
   if (lead.lead_outcome) return LEAD_OUTCOME_LABELS[lead.lead_outcome];
   return String(lead.status || "new").replaceAll("_", " ");
 }
 
 function getNextAction(lead: Lead, archived: boolean) {
   if (archived) return { label: "Archived", detail: "" };
-  if (lead.passed_at) return { label: "Passed", detail: formatPassReason(lead.pass_reason) };
   if (lead.manual_review_required) return { label: "Review website", detail: lead.manual_review_reason || "Automated review could not finish." };
   if (lead.priority_action) return { label: lead.priority_action.label, detail: lead.priority_action.detail };
   if (lead.lead_outcome) return { label: "Outcome recorded", detail: LEAD_OUTCOME_LABELS[lead.lead_outcome] };
@@ -142,16 +138,4 @@ function formatDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(date);
-}
-
-function formatPassReason(value?: string | null) {
-  const labels: Record<string, string> = {
-    strong_existing_site: "Strong existing site",
-    wrong_business_type: "Wrong type of business",
-    no_contact_path: "No usable contact path",
-    business_inactive: "Business appears inactive",
-    not_enough_opportunity: "Not enough opportunity",
-    other: "Other",
-  };
-  return value ? labels[value] || "Passed during prospecting review" : "Passed during prospecting review";
 }

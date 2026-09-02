@@ -64,8 +64,8 @@ export default async function Signup({
     <>
       <MarketingHeader />
       <form className="auth form" action={signup}>
-        <div className="eyebrow">Free evidence account</div>
-        <h2>{intendedPlan ? `Create an account for ${PLANS[intendedPlan].name}` : 'Find your first opportunity'}</h2>
+        <div className="eyebrow">Your first session is free</div>
+        <h2>{intendedPlan ? `Create an account for ${PLANS[intendedPlan].name}` : 'Work your first three prospects'}</h2>
         {params.message ? <div className="notice">{params.message}</div> : null}
         {params.error ? <div className="notice notice-error">{params.error}</div> : null}
         <input type="hidden" name="next" value={nextPath} />
@@ -74,7 +74,7 @@ export default async function Signup({
         <input className="input" name="email" type="email" placeholder="Email" required />
         <input className="input" name="password" type="password" minLength={10} placeholder="Password (10+ characters)" required />
         <button className="btn primary">Create account</button>
-        <small className="muted">No card required. The free plan includes 5 local searches and 10 complete opportunity analyses each month.</small>
+        <small className="muted">No card required. Search one market and Webvidence will prepare the first businesses worth reviewing.</small>
         <small className="auth-legal">By creating an account, you agree to the <Link href="/terms">Terms</Link> and acknowledge the <Link href="/privacy">Privacy Policy</Link>.</small>
         <div className="auth-help-links"><Link href={`/resend-confirmation?next=${encodeURIComponent(nextPath)}`}>Already signed up but missing the confirmation email?</Link></div>
         <div className="auth-switch">Already have an account? <Link href={`/login?${loginQuery.toString()}`}>Sign in</Link></div>

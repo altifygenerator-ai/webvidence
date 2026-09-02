@@ -20,7 +20,6 @@ export type RecommendationLead = {
   rating?: number | null;
   opportunityScore?: number | null;
   status?: string | null;
-  passedAt?: string | null;
   audit?: RecommendationAudit | null;
   auditStatus?: string | null;
 };
@@ -81,7 +80,7 @@ export function getTopContactRecommendations<T extends RecommendationLead>(
 export function getContactRecommendation<T extends RecommendationLead>(
   lead: T,
 ): ContactRecommendation<T> | null {
-  if (lead.passedAt || CONTACTED_STATUSES.has(String(lead.status || ''))) return null;
+  if (CONTACTED_STATUSES.has(String(lead.status || ''))) return null;
 
   const findings = lead.audit?.findings || [];
   if (findings.some((finding) => MANUAL_REVIEW_CODES.has(finding.code))) {
@@ -170,7 +169,6 @@ export function getPlainLeadReason(
 }
 
 export function isRecommendationPending(lead: RecommendationLead) {
-  if (lead.passedAt) return false;
   return lead.auditStatus === 'queued' || lead.auditStatus === 'running';
 }
 

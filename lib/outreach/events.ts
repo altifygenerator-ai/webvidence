@@ -28,9 +28,6 @@ export const PRODUCT_EVENTS = [
   'returned_from_reminder',
   'market_refreshed',
   'new_prospects_surfaced',
-  'lead_contacted',
-  'follow_up_cleared',
-  'reply_recorded',
 ] as const;
 
 export type ProductEvent = (typeof PRODUCT_EVENTS)[number];

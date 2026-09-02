@@ -181,5 +181,6 @@ function stageIndex(stage: OnboardingStage) {
   if (stage === "review") return 1;
   if (stage === "draft") return 2;
   if (stage === "send") return 3;
-  return 4;
+  if (stage === "repeat") return 4;
+  return 5;
 }

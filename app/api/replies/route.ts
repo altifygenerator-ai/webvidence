@@ -9,7 +9,6 @@ import { acquireOperationLock, releaseOperationLock, type OperationLock } from '
 import { analyzeReply } from '@/lib/providers/replies';
 import { REPLY_ACTIONS } from '@/lib/outreach/types';
 import { logApiUsage } from '@/lib/data/api-usage';
-import { markSessionWork } from '@/lib/retention/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +21,6 @@ const schema = z.object({
   isSummary: z.boolean().default(false),
   replyMessageId: z.string().uuid().optional(),
   preferredAction: z.enum(REPLY_ACTIONS).optional(),
-  sessionId: z.string().uuid().optional(),
 }).superRefine((value, ctx) => {
   if (!value.reply && !value.replyMessageId) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reply'], message: 'Add the prospect reply.' });
@@ -37,7 +35,6 @@ export async function POST(req: Request) {
   let lock: OperationLock | null = null;
   let charged = false;
   let inboundMessageId: string | null = null;
-  let sessionState: Awaited<ReturnType<typeof markSessionWork>> | null = null;
 
   try {
     assertTrustedMutation(req, { requireJson: true });
@@ -97,6 +94,13 @@ export async function POST(req: Request) {
       inboundMessageId = savedInbound.id;
       inboundMessage = savedInbound;
 
+      await db.from('lead_work_events').insert({
+        workspace_id: user.workspaceId,
+        user_id: user.id,
+        lead_id: lead.id,
+        event_type: 'reply_recorded',
+      });
+
     }
 
     const protectedLeadStatuses = new Set(['interested', 'quote_sent', 'won', 'lost', 'not_interested', 'do_not_contact', 'archived']);
@@ -111,15 +115,6 @@ export async function POST(req: Request) {
         updated_at: receivedAt,
       }).eq('id', lead.id).eq('workspace_id', user.workspaceId);
       if (leadUpdateError) throw new Error('Reply was saved, but the prospect status could not be updated.');
-    }
-
-    if (input.sessionId) {
-      sessionState = await markSessionWork({
-        user: { ...user, workspaceId: user.workspaceId },
-        sessionId: input.sessionId,
-        leadId: lead.id,
-        action: 'reply_recorded',
-      });
     }
 
     const [{ data: history }, { data: profile }] = await Promise.all([
@@ -148,7 +143,6 @@ export async function POST(req: Request) {
           reply: inboundMessage,
           analysis: null,
           warning: 'Reply saved, but the monthly outreach generation limit has been reached.',
-          session: sessionState,
         });
       }
       throw error;
@@ -246,7 +240,6 @@ export async function POST(req: Request) {
       reply: { ...inboundMessage, reply_summary: analysis.summary, recommended_action: analysis.recommendedAction, analysis_reasoning: analysis.reasoning },
       analysis,
       draft: draftResult.data,
-      session: sessionState,
     });
   } catch (error) {
     if (charged) await refundUsage(user, 'message');
@@ -258,7 +251,6 @@ export async function POST(req: Request) {
       return NextResponse.json({
         replySaved: true,
         replyMessageId: inboundMessageId,
-        session: sessionState,
         error: 'The reply was saved, but Webvidence could not prepare a response. Try again without re-entering it.',
       }, { status: 500 });
     }

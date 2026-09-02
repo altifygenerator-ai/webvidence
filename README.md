@@ -38,7 +38,7 @@ Set `NEXT_PUBLIC_SUPPORT_EMAIL` to an inbox you actually monitor before launch.
 
 For `/feedback`, add `RESEND_API_KEY`, `FEEDBACK_TO_EMAIL`, and `FEEDBACK_FROM_EMAIL`. The from-address domain must be configured with your email provider. The form still stores a response if an email notification cannot be delivered.
 
-The admin cost report uses list-price estimates configured in environment variables. Google free tiers, provider credits, model changes, and final invoices can make the real charge different
+The admin cost report uses list-price estimates configured in environment variables. Google free tiers, provider credits, model changes, and final invoices can make the real charge different.
 
 ## 2. Supabase migrations
 

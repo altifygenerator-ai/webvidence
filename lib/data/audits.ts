@@ -73,27 +73,18 @@ export async function saveLeadAudit(options: {
     if (findingsError) throw new Error(`Could not save audit findings: ${findingsError.message}`);
   }
 
-  // Public contact discoveries are deliberately kept out of audit.raw and the
-  // browser-readable audit payloads. Replace them as a set so a corrected site
-  // cannot leave stale email/social/form information behind.
-  const { error: deleteContactError } = await db.from('lead_contact_paths')
-    .delete()
-    .eq('workspace_id', workspaceId)
-    .eq('lead_id', leadId);
-  if (deleteContactError) throw new Error(`Could not refresh contact paths: ${deleteContactError.message}`);
-
+  // Contact paths remain in the service-role-only table. They are intentionally
+  // excluded from audits.raw and from the response returned by this helper.
+  await db.from('lead_contact_paths').delete().eq('lead_id', leadId).eq('workspace_id', workspaceId);
   if (audit.contactPaths.length) {
-    const { error: contactError } = await db.from('lead_contact_paths').insert(
-      audit.contactPaths.map((contact) => ({
-        workspace_id: workspaceId,
-        lead_id: leadId,
-        kind: contact.kind,
-        value: contact.value,
-        url: contact.url,
-        source_url: contact.sourceUrl,
-        verified_public: true,
-      })),
-    );
+    const { error: contactError } = await db.from('lead_contact_paths').insert(audit.contactPaths.map((path) => ({
+      workspace_id: workspaceId,
+      lead_id: leadId,
+      kind: path.kind,
+      value: path.value,
+      source_url: path.sourceUrl,
+      verified_at: new Date().toISOString(),
+    })));
     if (contactError) throw new Error(`Could not save public contact paths: ${contactError.message}`);
   }
 
@@ -141,6 +132,7 @@ export async function saveLeadAudit(options: {
   }
 
   const { contactPaths: _privateContactPaths, ...publicAudit } = audit;
+  void _privateContactPaths;
   return {
     ...publicAudit,
     id: saved.id,

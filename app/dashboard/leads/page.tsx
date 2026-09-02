@@ -33,8 +33,6 @@ type PipelineLead = {
   lead_outcome: LeadOutcome | null;
   manual_review_required: boolean;
   manual_review_reason: string | null;
-  passed_at: string | null;
-  pass_reason: string | null;
 };
 
 type SortKey =
@@ -92,7 +90,7 @@ export default async function Leads({
   let query = supabase
     .from("leads")
     .select(
-      "id,name,city,state,website,status,opportunity_score,reviews,rating,last_audited_at,created_at,updated_at,first_contacted_at,last_contacted_at,next_follow_up_at,follow_up_step,follow_up_stopped_at,lead_outcome,manual_review_required,manual_review_reason,passed_at,pass_reason",
+      "id,name,city,state,website,status,opportunity_score,reviews,rating,last_audited_at,created_at,updated_at,first_contacted_at,last_contacted_at,next_follow_up_at,follow_up_step,follow_up_stopped_at,lead_outcome,manual_review_required,manual_review_reason",
     )
     .eq("workspace_id", user.workspaceId)
     .limit(500);

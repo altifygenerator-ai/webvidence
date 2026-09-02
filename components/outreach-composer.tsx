@@ -15,7 +15,6 @@ import {
   type ReplyAction,
 } from "@/lib/outreach/types";
 import type { ProductEvent } from "@/lib/outreach/events";
-import { RoutineSettingsForm } from "@/components/routine-settings-form";
 
 type DeliveryChannel = "email" | "facebook" | "text";
 type ReplyChannel = DeliveryChannel | "phone" | "other";
@@ -59,9 +58,6 @@ type Props = {
   leadId: string;
   leadName: string;
   leadPhone: string | null;
-  sessionId?: string | null;
-  initialEmailRecipient?: string;
-  facebookContactUrl?: string | null;
   nextLeadHref?: string | null;
   nextLeadName?: string | null;
   initialStatus: string;
@@ -106,15 +102,11 @@ const intentOptions: Array<{
 ];
 
 const preferredChannelKey = "webvidence:preferred-outreach-channel";
-const profileTipDismissedKey = "webvidence:profile-tip-dismissed";
 
 export function OutreachComposer({
   leadId,
   leadName,
   leadPhone,
-  sessionId = null,
-  initialEmailRecipient = "",
-  facebookContactUrl = null,
   nextLeadHref = null,
   nextLeadName = null,
   initialStatus,
@@ -130,17 +122,10 @@ export function OutreachComposer({
   initialMessages,
 }: Props) {
   const [channel, setChannel] = useState<DeliveryChannel>(() => {
-    if (typeof window === "undefined") return facebookContactUrl ? "facebook" : initialEmailRecipient ? "email" : leadPhone ? "text" : "facebook";
+    if (typeof window === "undefined") return "facebook";
     const saved = window.localStorage.getItem(preferredChannelKey) as DeliveryChannel | null;
-    if (saved && channelOptions.some((item) => item.id === saved)) {
-      if (saved === "facebook" && facebookContactUrl) return "facebook";
-      if (saved === "email" && initialEmailRecipient) return "email";
-      if (saved === "text" && leadPhone) return "text";
-    }
-    if (facebookContactUrl) return "facebook";
-    if (initialEmailRecipient) return "email";
-    if (leadPhone) return "text";
-    return "facebook";
+    if (!saved || !channelOptions.some((item) => item.id === saved)) return "facebook";
+    return saved === "text" && !leadPhone ? "facebook" : saved;
   });
   const [intent, setIntent] = useState<OutreachIntent>("conversation");
   const [messages, setMessages] = useState(initialMessages);
@@ -163,11 +148,13 @@ export function OutreachComposer({
   const [followUpStoppedAt, setFollowUpStoppedAt] = useState(initialFollowUpStoppedAt);
   const [outcome, setOutcome] = useState<LeadOutcome | "">(initialOutcome || "");
   const [textRecipient, setTextRecipient] = useState(leadPhone || "");
-  const [emailRecipient, setEmailRecipient] = useState(initialEmailRecipient);
+  const [emailRecipient, setEmailRecipient] = useState("");
   const [showSendConfirm, setShowSendConfirm] = useState(false);
   const [profile, setProfile] = useState(outreachProfile);
   const [profileIsComplete, setProfileIsComplete] = useState(profileComplete);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [profileSkipped, setProfileSkipped] = useState(false);
+  const [pendingGenerate, setPendingGenerate] = useState(false);
   const [showReplySheet, setShowReplySheet] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replyChannel, setReplyChannel] = useState<ReplyChannel>("facebook");
@@ -176,12 +163,7 @@ export function OutreachComposer({
   const [replyAnalysis, setReplyAnalysis] = useState<ReplyAnalysis | null>(null);
   const [activeInboundId, setActiveInboundId] = useState<string | null>(null);
   const [differentApproachOpen, setDifferentApproachOpen] = useState(false);
-  const [outreachApproachesOpen, setOutreachApproachesOpen] = useState(false);
-  const [profileTipDismissed, setProfileTipDismissed] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(profileTipDismissedKey) === "1");
   const [preferredReplyAction, setPreferredReplyAction] = useState<ReplyAction>("ask_question");
-  const [showRoutineSetup, setShowRoutineSetup] = useState(false);
-  const [sessionCompleted, setSessionCompleted] = useState(false);
-  const [sessionNextLeadId, setSessionNextLeadId] = useState<string | null>(null);
 
   const selected = useMemo(
     () => messages.find((item) => item.id === selectedId) || null,
@@ -198,13 +180,15 @@ export function OutreachComposer({
   const pendingDeliveryKey = `webvidence:pending-delivery:${leadId}`;
   const sequenceLabel = getSequenceLabel({ firstContactedAt, followUpAt, followUpStep, followUpStoppedAt, outcome });
   const effectiveSelectedChannel = getDeliveryChannel(selected);
-  const emailHref = selected && effectiveSelectedChannel === "email" && emailRecipient.trim()
-    ? buildMailtoHref(emailRecipient.trim(), selected.subject || "", selected.body)
+  const emailHref = selected && effectiveSelectedChannel === "email"
+    ? buildMailtoHref(emailRecipient, selected.subject || "", selected.body)
     : "";
   const leadStage = getLeadStage({ status, outcome, latestDraft, latestInbound, firstContactedAt });
 
   useEffect(() => {
     if (!latestInbound?.recommended_action || !latestInbound.reply_summary) return;
+    // This hydrates persisted reply state once when the lead file opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveInboundId(latestInbound.id);
     setReplyAnalysis({
       summary: latestInbound.reply_summary,
@@ -213,6 +197,8 @@ export function OutreachComposer({
       suggestedResponse: responseDraft?.body || "",
       reasoning: latestInbound.analysis_reasoning || "",
     });
+    // Persisted reply state is intentionally hydrated once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -272,6 +258,11 @@ export function OutreachComposer({
   }
 
   async function requestGenerate() {
+    if (!profileIsComplete && !profileSkipped) {
+      setPendingGenerate(true);
+      setShowProfileSetup(true);
+      return;
+    }
     await generate();
   }
 
@@ -321,7 +312,11 @@ export function OutreachComposer({
       if (!response.ok) throw new Error(data.error || "Could not save the outreach profile.");
       setProfileIsComplete(true);
       setShowProfileSetup(false);
-      setNotice("Outreach details saved. Future drafts will use these details.");
+      setNotice("Outreach details saved.");
+      if (pendingGenerate) {
+        setPendingGenerate(false);
+        await generate();
+      }
     } catch (profileError) {
       setError(profileError instanceof Error ? profileError.message : "Could not save the outreach profile.");
     } finally {
@@ -336,7 +331,7 @@ export function OutreachComposer({
       const response = await fetch(`/api/messages/${messageId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...patch, ...(patch.status === "sent" && sessionId ? { sessionId } : {}) }),
+        body: JSON.stringify(patch),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save message.");
@@ -351,13 +346,6 @@ export function OutreachComposer({
         setNotice(`Message marked sent.${scheduling}${data.warning ? ` ${data.warning}` : ""}`);
         window.sessionStorage.removeItem(pendingDeliveryKey);
         setShowSendConfirm(false);
-        if (data.session) {
-          setSessionCompleted(Boolean(data.session.completed));
-          setSessionNextLeadId(data.session.nextLeadId || null);
-        }
-        if (data.firstSendConfirmed) {
-          setShowRoutineSetup(true);
-        }
         void track(messageId === responseDraft?.id ? "suggested_response_marked_sent" : "send_confirmed", {
           intent: String(data.message?.intent || ""),
           channel: String(data.message?.contact_channel || data.message?.channel || ""),
@@ -511,18 +499,14 @@ export function OutreachComposer({
     setError("");
     try {
       const payload = activeInboundId
-        ? { leadId, replyMessageId: activeInboundId, channel: replyChannel, preferredAction, ...(sessionId ? { sessionId } : {}) }
-        : { leadId, reply: replyText, channel: replyChannel, isSummary: replyIsSummary, preferredAction, ...(sessionId ? { sessionId } : {}) };
+        ? { leadId, replyMessageId: activeInboundId, channel: replyChannel, preferredAction }
+        : { leadId, reply: replyText, channel: replyChannel, isSummary: replyIsSummary, preferredAction };
       const response = await fetch("/api/replies", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (data.session) {
-        setSessionCompleted(Boolean(data.session.completed));
-        setSessionNextLeadId(data.session.nextLeadId || null);
-      }
       if (!response.ok) {
         if (data.replySaved && data.replyMessageId) {
           const savedInbound: Message = {
@@ -584,7 +568,6 @@ export function OutreachComposer({
     }
   }
 
-  const currentDraft = responseDraft || selected;
   const mobilePrimaryAction = buildMobileAction();
 
   function buildMobileAction() {
@@ -610,8 +593,8 @@ export function OutreachComposer({
 
         {leadStage === "new" ? (
           <div className="next-step-actions">
-            <button className="btn primary" type="button" onClick={() => prepareOutreach("conversation")}>Prepare message/contact</button>
-            {!sessionId ? <button className="btn quiet" type="button" onClick={() => void recordQuickOutcome("not_interested")}>Not a fit</button> : null}
+            <button className="btn primary" type="button" onClick={() => prepareOutreach("conversation")}>Prepare outreach</button>
+            <button className="btn quiet" type="button" onClick={() => void recordQuickOutcome("not_interested")}>Not a fit</button>
           </div>
         ) : null}
 
@@ -624,9 +607,8 @@ export function OutreachComposer({
             <div className="next-step-actions">
               <button className="btn primary" type="button" onClick={() => void copySpecificMessage(latestDraft)}>Copy message</button>
               {getDeliveryChannel(latestDraft) === "email" ? (
-                emailRecipient.trim() ? <a className="btn" href={buildMailtoHref(emailRecipient.trim(), latestDraft.subject || "", latestDraft.body)} onClick={() => { setSelectedId(latestDraft.id); beginExternalDelivery(latestDraft); }}>Open email</a> : <button className="btn" type="button" disabled>Confirm email first</button>
+                <a className="btn" href={buildMailtoHref(emailRecipient, latestDraft.subject || "", latestDraft.body)} onClick={() => { setSelectedId(latestDraft.id); beginExternalDelivery(latestDraft); }}>Open email</a>
               ) : null}
-              {getDeliveryChannel(latestDraft) === "facebook" && facebookContactUrl ? <a className="btn" href={facebookContactUrl} target="_blank" rel="noreferrer" onClick={() => { setSelectedId(latestDraft.id); beginExternalDelivery(latestDraft); }}>Open Facebook page</a> : null}
               {getDeliveryChannel(latestDraft) === "text" ? (
                 <button className="btn" type="button" onClick={() => openTextApp(latestDraft)}>Open text</button>
               ) : null}
@@ -677,35 +659,31 @@ export function OutreachComposer({
           <div className="panel-heading">
             <div>
               <div className="eyebrow">Prepare outreach</div>
-              <h3>{intent === "service_intro" ? "Prepare a service introduction" : intent === "conversation" ? "Start a conversation" : formatIntent(intent)}</h3>
+              <h3>{intent === "service_intro" ? "Prepare a service introduction" : "What kind of message are you preparing?"}</h3>
             </div>
             <span className="tag">manual approval</span>
           </div>
 
           {intent !== "service_intro" ? (
-            <>
-              <div className="outreach-default-approach">
-                <div><b>{formatIntent(intent)}</b><span>{intentOptions.find((option) => option.id === intent)?.note}</span></div>
-                <button className="btn quiet" type="button" onClick={() => setOutreachApproachesOpen((current) => !current)}>{outreachApproachesOpen ? "Hide approaches" : "Change approach"}</button>
-              </div>
-              {outreachApproachesOpen ? <div className="outreach-intent-control" role="tablist" aria-label="Outreach intent">
-                {intentOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    className={intent === option.id ? "active" : ""}
-                    type="button"
-                    role="tab"
-                    aria-selected={intent === option.id}
-                    onClick={() => { chooseIntent(option.id); setOutreachApproachesOpen(false); }}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div> : null}
-            </>
+            <div className="outreach-intent-control" role="tablist" aria-label="Outreach intent">
+              {intentOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={intent === option.id ? "active" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={intent === option.id}
+                  onClick={() => chooseIntent(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           ) : (
             <p className="muted">Use the recorded reply and identified need to make a short, practical connection to your service.</p>
           )}
+
+          {intent !== "service_intro" ? <p className="intent-note">{intentOptions.find((option) => option.id === intent)?.note}</p> : null}
 
           <div className="delivery-channel-control" aria-label="Contact channel">
             <span>Channel</span>
@@ -744,7 +722,12 @@ export function OutreachComposer({
             {loading ? <><span className="mini-spinner" /> Preparing draft…</> : intent === "website_finding" ? "Prepare from verified finding" : intent === "follow_up" ? "Prepare follow-up" : intent === "service_intro" ? "Prepare introduction" : "Prepare grounded draft"}
           </button>
           <small className="muted outreach-helper">Webvidence never sends automatically. You review, edit, and decide what was actually sent.</small>
-
+          {!profileIsComplete ? (
+            <div className="outreach-profile-tip">
+              <span>Add your service, best-fit customer, location, pricing range, and natural style to personalize drafts without changing the selected approach.</span>
+              <button type="button" onClick={() => setShowProfileSetup(true)}>Set up now</button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -761,7 +744,7 @@ export function OutreachComposer({
             <label className="delivery-recipient">
               <span>Email recipient</span>
               <input className="input outreach-input" inputMode="email" type="email" value={emailRecipient} onChange={(event) => setEmailRecipient(event.target.value)} placeholder="Business email address" autoComplete="email" />
-              <small>Use the verified public email if it is correct, or replace it. Always confirm the recipient before sending.</small>
+              <small>Webvidence does not guess an address. Add the correct business email before opening your email app.</small>
             </label>
           ) : null}
           {effectiveSelectedChannel === "text" ? (
@@ -784,21 +767,14 @@ export function OutreachComposer({
           <div className="draft-actions">
             <button className="btn" type="button" onClick={() => void updateMessage(selected.id, { subject: selected.subject, body: selected.body })} disabled={saving}>Save edits</button>
             <button className="btn" type="button" onClick={() => void copySpecificMessage(selected)}>Copy message</button>
-            {effectiveSelectedChannel === "email" ? (emailHref ? <a className="btn delivery-button" href={emailHref} onClick={() => beginExternalDelivery(selected)}>Open email app</a> : <button className="btn delivery-button" type="button" disabled>Confirm email first</button>) : null}
-            {effectiveSelectedChannel === "facebook" && facebookContactUrl ? <a className="btn delivery-button" href={facebookContactUrl} target="_blank" rel="noreferrer" onClick={() => beginExternalDelivery(selected)}>Open Facebook page</a> : null}
+            {effectiveSelectedChannel === "email" ? <a className="btn delivery-button" href={emailHref} onClick={() => beginExternalDelivery(selected)}>Open email app</a> : null}
             {effectiveSelectedChannel === "text" ? <button className="btn delivery-button" type="button" onClick={() => openTextApp(selected)}>Open text app</button> : null}
             <button className="btn primary" type="button" onClick={() => void updateMessage(selected.id, { subject: selected.subject, body: selected.body, status: "sent" })} disabled={saving || selected.status === "sent"}>{selected.status === "sent" ? "Already sent" : "Mark sent now"}</button>
           </div>
-          {!profileIsComplete && !profileTipDismissed ? (
-            <div className="outreach-profile-tip">
-              <span>Want future drafts closer to your voice? Add your service, best-fit customer, location, pricing range, and natural style.</span>
-              <div><button type="button" onClick={() => setShowProfileSetup(true)}>Personalize future drafts</button><button type="button" onClick={() => { window.localStorage.setItem(profileTipDismissedKey, "1"); setProfileTipDismissed(true); }}>Not now</button></div>
-            </div>
-          ) : null}
           {selected.status === "sent" ? (
             <div className="sent-next-card">
-              <div><span className="sent-check">Sent ✓</span><b>{sessionCompleted ? "Session complete" : "Prospect recorded"}</b><small>{sessionCompleted ? "You reached a clean stopping point. Come back for the next prepared session." : nextLeadName ? `Next prospect: ${nextLeadName}` : "The contact date and follow-up were saved."}</small></div>
-              {sessionCompleted ? <Link className="btn primary" href="/dashboard?session=complete">Finish session</Link> : sessionNextLeadId && sessionId ? <Link className="btn primary" href={`/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link> : nextLeadHref ? <Link className="btn primary" href={nextLeadHref}>Next prospect</Link> : <Link className="btn" href="/dashboard">Back to Today</Link>}
+              <div><span className="sent-check">Sent ✓</span><b>Conversation recorded</b><small>{nextLeadName ? `Next recommended: ${nextLeadName}` : "The contact date and follow-up were saved."}</small></div>
+              {nextLeadHref ? <Link className="btn primary" href={nextLeadHref}>Review next lead</Link> : <Link className="btn" href="/dashboard">Back to Today</Link>}
             </div>
           ) : null}
           {messages.filter((message) => message.direction !== "inbound").length > 1 ? (
@@ -867,15 +843,8 @@ export function OutreachComposer({
             <label><span>Approximate pricing or project range</span><input className="input" value={profile.typicalProjectRange} onChange={(event) => setProfile({ ...profile, typicalProjectRange: event.target.value })} /></label>
             <label><span>How should messages sound?</span><textarea className="input" rows={4} value={profile.outreachStyle} onChange={(event) => setProfile({ ...profile, outreachStyle: event.target.value })} /></label>
             <button className="btn primary" type="button" onClick={() => void saveProfileAndContinue()} disabled={saving}>{saving ? "Saving…" : "Save and continue"}</button>
-            <button className="btn" type="button" onClick={() => { window.localStorage.setItem(profileTipDismissedKey, "1"); setProfileTipDismissed(true); setShowProfileSetup(false); }}>Skip for now</button>
+            <button className="btn" type="button" onClick={() => { setShowProfileSetup(false); setProfileSkipped(true); if (pendingGenerate) { setPendingGenerate(false); void generate(); } }}>Skip for now</button>
           </section>
-        </div>
-      ) : null}
-
-      {sessionId && (sessionCompleted || sessionNextLeadId) && selected?.status !== "sent" ? (
-        <div className="sent-next-card session-progress-card">
-          <div><span className="sent-check">Worked ✓</span><b>{sessionCompleted ? "Session complete" : "Prospect recorded"}</b><small>{sessionCompleted ? "You reached a clean stopping point." : "Move to the next prepared prospect when you are ready."}</small></div>
-          {sessionCompleted ? <Link className="btn primary" href="/dashboard?session=complete">Finish session</Link> : <Link className="btn primary" href={`/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link>}
         </div>
       ) : null}
 
@@ -921,15 +890,6 @@ export function OutreachComposer({
                 ) : null}
               </>
             )}
-          </section>
-        </div>
-      ) : null}
-
-      {showRoutineSetup ? (
-        <div className="send-confirm-layer" role="presentation">
-          <section className="send-confirm-sheet routine-setup-sheet" role="dialog" aria-modal="true" aria-label="Set prospecting routine">
-            <RoutineSettingsForm compact onSaved={() => window.setTimeout(() => setShowRoutineSetup(false), 700)} />
-            <button className="btn quiet" type="button" onClick={() => setShowRoutineSetup(false)}>Not now</button>
           </section>
         </div>
       ) : null}
@@ -1030,9 +990,9 @@ function getSequenceLabel(input: {
   followUpStoppedAt: string;
   outcome: LeadOutcome | "";
 }) {
-  if (input.outcome) return { title: LEAD_OUTCOME_LABELS[input.outcome], detail: "Follow-up sequence is stopped." };
-  if (input.followUpStoppedAt || input.followUpStep >= 3) return { title: "Sequence complete", detail: "Three follow-ups have been recorded. No more follow-up dates are scheduled." };
-  if (!input.firstContactedAt) return { title: "Not contacted yet", detail: "Confirm the first sent message once. Webvidence will set the suggested 3, 7, and 14-day follow-up dates." };
-  if (input.followUpAt) return { title: `Follow-up ${Math.min(input.followUpStep + 1, 3)} of 3`, detail: `Next follow-up due: ${new Date(input.followUpAt).toLocaleString()}.` };
+  if (input.outcome) return { title: LEAD_OUTCOME_LABELS[input.outcome], detail: "Automatic follow-up reminders are stopped." };
+  if (input.followUpStoppedAt || input.followUpStep >= 3) return { title: "Sequence complete", detail: "Three follow-ups have been recorded. No more reminders are scheduled." };
+  if (!input.firstContactedAt) return { title: "Not contacted yet", detail: "Confirm the first sent message once. Webvidence will handle the 3, 7, and 14-day follow-up schedule." };
+  if (input.followUpAt) return { title: `Follow-up ${Math.min(input.followUpStep + 1, 3)} of 3`, detail: `Next reminder: ${new Date(input.followUpAt).toLocaleString()}.` };
   return { title: "Waiting on reply", detail: "Record a reply or outcome when something changes." };
 }

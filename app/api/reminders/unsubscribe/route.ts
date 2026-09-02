@@ -1,22 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { verifyReminderUnsubscribeToken } from '@/lib/retention/reminder-token';
+import { verifyUnsubscribeToken } from '@/lib/retention/unsubscribe';
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const userId = url.searchParams.get('u') || '';
-  const signature = url.searchParams.get('sig') || '';
-  if (!userId || !signature || !verifyReminderUnsubscribeToken(userId, signature)) {
-    return new NextResponse('This unsubscribe link is invalid.', { status: 400 });
-  }
+  const userId = verifyUnsubscribeToken(url.searchParams.get('token') || '');
+  if (!userId) return new NextResponse('This preference link is invalid or expired.', { status: 400 });
   const db = createAdminClient();
-  const { error } = await db.from('prospecting_routines')
-    .update({ reminder_email_enabled: false, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-  if (error) return new NextResponse('Could not update reminder preferences.', { status: 500 });
-  return new NextResponse('Webvidence email reminders are now turned off. You can turn them back on from Outreach settings.', {
-    headers: { 'content-type': 'text/plain; charset=utf-8' },
-  });
+  await db.from('prospecting_routines').update({ reminder_emails_enabled: false, unsubscribed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('user_id', userId);
+  return NextResponse.redirect(new URL('/dashboard/settings?reminders=off', process.env.NEXT_PUBLIC_APP_URL || url.origin));
 }
-
-export const POST = GET;

@@ -11,7 +11,7 @@ import { absoluteUrl, publicMetadata, SITE_URL } from '@/lib/seo';
 
 export const metadata: Metadata = publicMetadata({
   title: 'Pricing for Freelance Web Designers',
-  description: 'Start free with local business searches, prepared prospecting sessions, one watched market, public contact discovery, and optional routine reminders. Paid plans start at $19 per month.',
+  description: 'Start free with local business searches and website analyses, or try the Freelancer plan free for 7 days with a card. Paid plans start at $19 per month.',
   path: '/pricing',
   keywords: [
     'Webvidence pricing',
@@ -64,7 +64,7 @@ export default async function Pricing({
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
           url: absoluteUrl(`/pricing?plan=${id}`),
-          description: `${plan.searches} searches, ${plan.audits} analyzed prospects, ${plan.messages} outreach drafts, ${plan.campaigns} active campaigns, and ${plan.saved} saved leads per month.${id === 'freelancer' ? ' New eligible accounts can start with a 7-day card-required trial.' : ''}`,
+          description: `Prepared prospecting sessions, public contact discovery, saved markets, follow-up workflow, and up to ${plan.saved} saved prospects.${id === 'freelancer' ? ' New eligible accounts can start with a 7-day card-required trial.' : ''}`,
         };
       }),
     },
@@ -88,8 +88,7 @@ export default async function Pricing({
           <div className="section-code"><span>01</span> Low-risk pricing</div>
           <h1>Start with proof.<br />Scale when it works.</h1>
           <p className="hero-lede">
-            Use the free plan to see whether Webvidence produces prospects you would actually contact.
-            Upgrade when it becomes part of the weekly sales routine.
+            Work a complete prospecting session on Free. Upgrade when you want more markets, repeated preparation, and a larger weekly routine.
           </p>
           {viewer ? (
             <div className="pricing-account-state">
@@ -107,18 +106,14 @@ export default async function Pricing({
                 <h3>{plan.name}</h3>
                 <strong>${plan.price}</strong>
                 <span>/mo</span>
-                <ul>
-                  <li>{plan.searches} local searches / month</li>
-                  <li>{plan.audits} analyzed prospects</li>
-                  <li>{plan.messages} outreach drafts</li>
-                  <li>{plan.campaigns} active campaigns</li>
-                  <li>Prepared prospecting sessions</li>
-                  <li>{id === 'free' ? '1 watched market' : 'Watched markets feed Today'}</li>
+                <ul className="plan-value-list">
+                  <li>Prepared 3-prospect sessions</li>
+                  <li>{id === 'free' ? '1 watched market' : `${plan.campaigns} saved or watched markets`}</li>
                   <li>Public contact-path discovery</li>
                   <li>Follow-up and routine reminders</li>
-                  <li>{plan.saved} saved leads</li>
-                  <li>{plan.exports ? 'CSV export' : 'No bulk export'}</li>
+                  <li>Conversation-first drafts</li>
                 </ul>
+                <details className="plan-usage-limits"><summary>Usage limits</summary><ul><li>{plan.searches} market searches / month</li><li>{plan.audits} website analyses</li><li>{plan.messages} outreach drafts</li><li>{plan.saved} saved prospects</li><li>{plan.exports ? 'CSV export included' : 'No bulk export'}</li></ul></details>
                 <PlanAction
                   plan={id}
                   signedIn={Boolean(viewer)}

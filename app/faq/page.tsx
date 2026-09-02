@@ -65,7 +65,7 @@ const faqs = [
   },
   {
     question: 'What is included in the free plan?',
-    answer: 'The current free plan includes 5 local searches, 10 charged website analyses, 20 outreach drafts, 5 active campaigns, and room for 50 open saved leads each month. A business listing where Google did not provide a website link does not use a charged website-analysis credit until a website is added and checked.',
+    answer: 'The current free plan includes your first prepared prospecting sessions, 5 local market searches, 10 charged website analyses, 20 outreach drafts, 5 saved markets, and room for 50 open saved prospects each month. A business listing where Google did not provide a website link does not use a charged website-analysis credit until a website is added and checked.',
   },
   {
     question: 'How does the 7-day Freelancer trial work?',

@@ -34,13 +34,13 @@ describe('focused lead workflow', () => {
 });
 
 describe('campaign and pipeline focus', () => {
-  it('presents recommendations as businesses to review, not guaranteed buyers', () => {
+  it('turns search results into a small prepared session', () => {
     const page = source('app/dashboard/campaigns/page.tsx');
-    expect(page).toContain('Your first prospect is ready');
-    expect(page).toContain('Webvidence picked the strongest next action');
-    expect(page).toContain("item.signals.slice(0, 2)");
-    expect(page).toContain('Open details');
-    expect(page).not.toContain('Best places to start');
+    expect(page).toContain('Prepared session');
+    expect(page).toContain('prospects are ready');
+    expect(page).toContain('StartSessionButton');
+    expect(page).toContain('Passing a poor fit counts as useful work');
+    expect(page).not.toContain('contacted today');
   });
 
   it('keeps the pipeline compact and subordinates bulk actions', () => {

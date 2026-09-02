@@ -6,16 +6,15 @@ import { useRouter } from 'next/navigation';
 import { TIMEZONE_OFFSET_COOKIE } from '@/lib/leads/timezone';
 
 const nav = [
-  ['Overview', '/dashboard', '01'],
-  ['Find prospects', '/dashboard/campaigns', '02'],
+  ['Today', '/dashboard', '01'],
+  ['Find', '/dashboard/campaigns', '02'],
   ['Pipeline', '/dashboard/leads', '03'],
-  ['Billing', '/dashboard/billing', '04'],
-  ['Settings', '/dashboard/settings', '05'],
+  ['Settings', '/dashboard/settings', '04'],
 ] as const;
 
 const quickNav = nav.slice(0, 3);
 
-export function AppShell({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
+export function AppShell({ children, admin = false, focused = false }: { children: React.ReactNode; admin?: boolean; focused?: boolean }) {
   const router = useRouter();
   const [pipelineActionCount, setPipelineActionCount] = useState(0);
 
@@ -39,20 +38,21 @@ export function AppShell({ children, admin = false }: { children: React.ReactNod
   );
 
   return (
-    <div className="app-frame">
+    <div className={focused ? 'app-frame app-frame-focused' : 'app-frame'}>
       <aside className="app-sidebar">
         <div>
           <Link className="wordmark app-wordmark" href="/dashboard"><span>WEB</span><i>V</i><span>IDENCE</span></Link>
-          <p className="sidebar-kicker">PROSPECT DESK / 01</p>
+          <p className="sidebar-kicker">YOUR PROSPECTING ROUTINE</p>
         </div>
         <nav className="app-nav">
           {nav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
-          {admin && <Link href="/dashboard/admin"><small>06</small><span>Admin control</span></Link>}
+          {admin && <Link href="/dashboard/admin"><small>05</small><span>Admin control</span></Link>}
         </nav>
         <div className="sidebar-foot">
           <div className="workspace-status"><span className="live-dot" /> Protected workspace</div>
           <small>Searches, audits, outreach drafts, and plan access are checked on the server.</small>
           <Link className="sidebar-home" href="/feedback">Share feedback</Link>
+          <Link className="sidebar-home" href="/dashboard/billing">Billing & plan</Link>
           <Link className="sidebar-home" href="/">Public homepage</Link>
           <form action="/auth/logout" method="post">
             <button className="logout-button" type="submit">Log out of Webvidence</button>
@@ -67,10 +67,11 @@ export function AppShell({ children, admin = false }: { children: React.ReactNod
           <div className="mobile-app-menu-panel">
             <nav>
               {nav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
-              {admin && <Link href="/dashboard/admin"><small>06</small><span>Admin control</span></Link>}
+              {admin && <Link href="/dashboard/admin"><small>05</small><span>Admin control</span></Link>}
             </nav>
             <div className="mobile-menu-foot">
               <Link href="/feedback">Share feedback</Link>
+              <Link href="/dashboard/billing">Billing & plan</Link>
               <Link href="/">Public homepage</Link>
               <form action="/auth/logout" method="post">
                 <button type="submit">Log out</button>
@@ -81,13 +82,13 @@ export function AppShell({ children, admin = false }: { children: React.ReactNod
       </header>
 
       <main className="app-main">
-        <div className="app-topbar"><span>WEBVIDENCE OPERATIONS</span><span>Workspace / Primary</span></div>
+        {!focused ? <div className="app-topbar"><span>WEBVIDENCE</span><span>Workspace / Primary</span></div> : null}
         {children}
       </main>
 
       <nav className="mobile-quick-nav" aria-label="Workspace shortcuts">
-        {quickNav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label === 'Find prospects' ? 'Search' : label)}</Link>)}
-        <Link href="/dashboard/settings"><small>05</small><span>Settings</span></Link>
+        {quickNav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
+        <Link href="/dashboard/settings"><small>04</small><span>More</span></Link>
       </nav>
     </div>
   );
