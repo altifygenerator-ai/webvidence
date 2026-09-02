@@ -7,12 +7,10 @@ import { logApiUsage } from '@/lib/data/api-usage';
 import type { PlanId } from '@/lib/plans';
 
 type ReminderType = 'session_ready' | 'follow_up_due' | 'market_update' | 'weekly_ready' | 'inactivity_rescue';
-
 export async function runRetentionJobs() {
   return { markets: await refreshDueMarkets(), reminders: await sendUsefulReminders() };
 }
-
-async function refreshDueMarkets() {
+export async function refreshDueMarkets() {
   const db = createAdminClient();
   const now = new Date();
   const placesKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -55,7 +53,6 @@ async function refreshDueMarkets() {
   }
   return { checked: campaigns?.length || 0, surfaced };
 }
-
 async function prepareSession(workspaceId: string, userId: string, campaignId: string, leadIds: string[]) {
   const db = createAdminClient();
   const { data: open } = await db.from('prospecting_sessions').select('id').eq('user_id', userId).in('status', ['ready','active']).limit(1).maybeSingle();
@@ -64,8 +61,7 @@ async function prepareSession(workspaceId: string, userId: string, campaignId: s
   const { data: session } = await db.from('prospecting_sessions').insert({ workspace_id: workspaceId, user_id: userId, campaign_id: campaignId, target_size: selected.length }).select('id').single();
   if (session) await db.from('prospecting_session_items').insert(selected.map((leadId, index) => ({ session_id: session.id, lead_id: leadId, position: index + 1 })));
 }
-
-async function sendUsefulReminders() {
+export async function sendUsefulReminders() {
   const db = createAdminClient();
   if (!env.RESEND_API_KEY) return { sent: 0, skipped: 'RESEND_API_KEY is not configured.' };
   const { data: routines } = await db.from('prospecting_routines').select('user_id,workspace_id,weekdays,preferred_time,timezone,weekly_reminder_enabled,follow_up_reminders_enabled,market_reminders_enabled,inactivity_reminders_enabled').eq('reminder_emails_enabled', true).is('unsubscribed_at', null).limit(500);
@@ -93,7 +89,6 @@ async function sendUsefulReminders() {
   }
   return { sent };
 }
-
 async function deliver(routine: { user_id: string; workspace_id: string }, email: string, type: ReminderType, dedupeKey: string, path: string, subject: string, text: string) {
   const db = createAdminClient();
   const { data: claim } = await db.from('reminder_deliveries').insert({ workspace_id: routine.workspace_id, user_id: routine.user_id, reminder_type: type, dedupe_key: dedupeKey, destination_path: path }).select('id').maybeSingle();
@@ -108,11 +103,9 @@ async function deliver(routine: { user_id: string; workspace_id: string }, email
   await productEvent(routine.workspace_id, routine.user_id, 'reminder_sent', { type, path });
   return 1;
 }
-
 async function productEvent(workspaceId: string, userId: string, operation: string, metadata: Record<string, unknown>) {
   await logApiUsage({ workspaceId, userId, provider: 'webvidence_event', operation, metadata }).catch(() => undefined);
 }
-
 function routineWindow(routine: { weekdays: number[]; preferred_time: string; timezone: string }) {
   try {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: routine.timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
