@@ -16,12 +16,14 @@ type SessionItem = {
   findings: Array<{ code: string; label: string; severity: string; evidence: string }>;
 };
 type Draft = { id: string; subject: string | null; body: string; status: string; contact_channel: string | null; channel: string };
+type SessionApproach = 'conversation' | 'website_finding';
 
 export function ProspectSession({ sessionId, initialStatus, items, returnedFromReminder = false }: { sessionId: string; initialStatus: string; items: SessionItem[]; returnedFromReminder?: boolean }) {
   const firstPending = Math.max(0, items.findIndex((item) => !['contacted', 'passed'].includes(item.status)));
   const [currentIndex, setCurrentIndex] = useState(firstPending < 0 ? items.length : firstPending);
   const [itemStates, setItemStates] = useState(items.map((item) => item.status));
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [approach, setApproach] = useState<SessionApproach>('conversation');
   const [draftOpen, setDraftOpen] = useState(false);
   const [passOpen, setPassOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -62,21 +64,37 @@ export function ProspectSession({ sessionId, initialStatus, items, returnedFromR
     }
   }, [current, currentIndex, currentStatus, sessionAction]);
 
-  async function prepareDraft() {
-    if (!current) return;
+  async function prepareDraft(nextApproach: SessionApproach = approach) {
+    if (!current) return false;
     setBusy(true); setError(''); setNotice('');
     try {
       const channel = bestContact?.kind === 'email' || ['contact_form', 'quote_form', 'booking_form'].includes(bestContact?.kind || '') ? 'email' : bestContact?.kind === 'phone' ? 'text' : 'facebook';
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ leadId: current.leadId, channel, intent: 'conversation' }),
+        body: JSON.stringify({ leadId: current.leadId, channel, intent: nextApproach }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'The draft could not be prepared.');
       setDrafts((value) => ({ ...value, [current.leadId]: data.message }));
       setDraftOpen(true);
-    } catch (draftError) { setError(draftError instanceof Error ? draftError.message : 'The draft could not be prepared.'); }
-    finally { setBusy(false); }
+      return true;
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : 'The draft could not be prepared.');
+      return false;
+    } finally { setBusy(false); }
+  }
+
+  async function chooseApproach(nextApproach: SessionApproach) {
+    if (nextApproach === approach || busy) return;
+    if (!draftOpen || !draft) {
+      setApproach(nextApproach);
+      setError('');
+      return;
+    }
+    const previousApproach = approach;
+    setApproach(nextApproach);
+    const changed = await prepareDraft(nextApproach);
+    if (!changed) setApproach(previousApproach);
   }
 
   async function pass(reason: PassReason) {
@@ -157,9 +175,17 @@ export function ProspectSession({ sessionId, initialStatus, items, returnedFromR
             </div>
           </section>
 
+          <div className="session-approach-row">
+            <span>Approach</span>
+            <div className="session-approach-toggle" role="group" aria-label="Outreach approach">
+              <button className={approach === 'conversation' ? 'active' : ''} type="button" onClick={() => void chooseApproach('conversation')} disabled={busy} aria-pressed={approach === 'conversation'}><MessageCircle size={14} /> Conversation</button>
+              <button className={approach === 'website_finding' ? 'active' : ''} type="button" onClick={() => void chooseApproach('website_finding')} disabled={busy} aria-pressed={approach === 'website_finding'}><Sparkles size={14} /> Evidence</button>
+            </div>
+          </div>
+
           {!draftOpen ? (
             <div className="session-primary-actions">
-              <button className="btn primary session-contact-button" type="button" onClick={() => void prepareDraft()} disabled={busy}><MessageCircle size={18} />{busy ? 'Preparing…' : 'Start conversation'}</button>
+              <button className="btn primary session-contact-button" type="button" onClick={() => void prepareDraft()} disabled={busy}><MessageCircle size={18} />{busy ? 'Preparing…' : approach === 'website_finding' ? 'Use evidence' : 'Start conversation'}</button>
               <button className="btn quiet session-pass-button" type="button" onClick={() => setPassOpen((value) => !value)}><X size={17} /> Not a fit</button>
             </div>
           ) : null}
