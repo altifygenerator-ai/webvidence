@@ -164,7 +164,7 @@ export async function POST(req: Request) {
           .in('status', ['draft', 'active', 'paused']);
         if ((campaignCount || 0) >= PLANS[user.plan].campaigns) {
           throw new SearchHttpError(
-            `Your ${PLANS[user.plan].name} plan allows ${PLANS[user.plan].campaigns} saved markets. Archive an existing market or upgrade to search a new one.`,
+            `Your ${PLANS[user.plan].name} plan allows ${PLANS[user.plan].campaigns} active campaigns. Archive an existing campaign or upgrade to search a new market.`,
             402,
           );
         }

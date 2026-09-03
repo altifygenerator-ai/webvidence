@@ -9,7 +9,7 @@ import { absoluteUrl, publicMetadata, SITE_NAME, SITE_URL } from '@/lib/seo';
 
 export const metadata: Metadata = publicMetadata({
   title: 'Research Local Businesses and Prepare Better Web Design Outreach',
-  description: 'Research local businesses, decide who is worth contacting, and prepare grounded web design outreach without automatically sending anything.',
+  description: 'Build a repeatable local prospecting routine with prepared three-prospect sessions, public contact discovery, watched markets, follow-up reminders, and manual outreach.',
   path: '/',
 });
 
@@ -18,6 +18,12 @@ const findings = [
   ['Search structure', 'No dedicated service pages', 'High'],
   ['Mobile contact', 'Phone number is not clickable', 'Review'],
   ['Technical trust', 'No structured data found', 'Review'],
+];
+
+const previewResults = [
+  { name: 'Lone Pine Roofing', location: 'Austin, TX', score: 88, note: 'No quote form · weak mobile contact' },
+  { name: 'Hill Country Exteriors', location: 'Round Rock, TX', score: 76, note: 'Slow mobile load · thin service content' },
+  { name: 'Red Oak Roof Co.', location: 'Georgetown, TX', score: 54, note: 'Good basics · a few smaller gaps' },
 ];
 
 export default async function Home() {
@@ -107,13 +113,13 @@ export default async function Home() {
         <section className="hero shell">
           <div className="hero-copy">
             <div className="section-code"><span>01</span> Built for freelance web developers</div>
-            <h1>Know who to contact today.</h1>
-            <p className="hero-lede">Webvidence prepares a small prospecting session from real local businesses, shows why each one is worth your time, and helps you start a thoughtful conversation.</p>
+            <h1>Build a prospecting routine you can repeat.</h1>
+            <p className="hero-lede">Search a market once, then work short prepared sessions. Webvidence checks public website evidence and contact paths, keeps follow-ups organized, and can watch a market for fresh prospects.</p>
             <div className="hero-actions">
-              <Link className="action primary" href={viewer ? '/dashboard' : '/signup'}><span>{viewer ? 'Open today’s session' : 'Try your first session free'}</span><b>↗</b></Link>
+              <Link className="action primary" href={viewer ? '/dashboard/campaigns' : '/signup'}><span>{viewer ? 'Find a market' : 'Try it free'}</span><b>↗</b></Link>
               <Link className="text-link" href="/#product-tour">See the app before signing up <span>↓</span></Link>
             </div>
-            <div className="hero-note"><b>No automatic sending.</b> You review the business, choose the approach, edit the draft, and stay in control.</div>
+            <div className="hero-note"><b>No mass-email automation.</b> Webvidence prepares the work and useful reminders. You choose the prospect, review the contact path, edit the draft, and send manually.</div>
           </div>
 
           <div className="hero-evidence-wrap">
@@ -139,7 +145,7 @@ export default async function Home() {
         </section>
 
         <section className="proof-strip">
-          <div className="shell proof-inner"><span>FIND A MARKET</span><i /> <span>WORK 3 PROSPECTS</span><i /> <span>CONTACT OR PASS</span><i /> <span>FINISH AND COME BACK READY</span></div>
+          <div className="shell proof-inner"><span>SEARCH A MARKET</span><i /> <span>REVIEW THE BUSINESS</span><i /> <span>DECIDE WHO IS WORTH YOUR TIME</span><i /> <span>START A REAL CONVERSATION</span></div>
         </section>
 
         <section id="product-tour" className="product-tour">
@@ -147,9 +153,9 @@ export default async function Home() {
             <div className="product-tour-intro">
               <div>
                 <div className="section-code"><span>02</span> What you actually get</div>
-                <h2>A finishable prospecting session, not another lead list.</h2>
+                <h2>From a location search to a repeatable working session.</h2>
               </div>
-              <p>Open Webvidence, see the work that is ready, and make one decision at a time. Contact the good fits, pass on the poor ones, and stop when the batch is done.</p>
+              <p>This is the working part of Webvidence. Search a market, then work one prepared prospect at a time: review, contact or pass, move to the next prospect, finish the session, and return when the next routine is ready.</p>
             </div>
 
             <div className="product-window" aria-label="Webvidence product preview">
@@ -158,18 +164,19 @@ export default async function Home() {
                 <aside className="product-mini-sidebar">
                   <b>WEBVIDENCE</b>
                   <nav><span className="active">01 Today</span><span>02 Find</span><span>03 Pipeline</span><span>04 Settings</span></nav>
-                  <small>3-PROSPECT ROUTINE</small>
+                  <small>FOCUSED PROSPECTING</small>
                 </aside>
-                <div className="product-preview-main retention-preview">
-                  <div className="preview-heading"><div><small>MONDAY · TODAY</small><h3>3 actions ready</h3></div><span>About 8 minutes</span></div>
-                  <div className="retention-preview-card">
-                    <div className="retention-preview-top"><span>PROSPECT 1 OF 3</span><i><b /> <b /> <b /></i></div>
-                    <h4>Delta Ridge Roofing</h4><small>Hot Springs, Arkansas · Active · 47 reviews</small>
-                    <div className="retention-preview-reason"><b>Why Webvidence picked this</b><p>Active local business with a clear website opportunity and a public Facebook page.</p></div>
-                    <div className="retention-preview-contact"><span>Facebook <em>Best</em></span><span>Email</span><span>Contact form</span></div>
-                    <div className="retention-preview-actions"><button type="button">Start conversation</button><button type="button">Not a fit</button></div>
+                <div className="product-preview-main session-preview-main">
+                  <div className="preview-heading"><div><small>TODAY</small><h3>3 prospects ready</h3></div><span>About 9 minutes</span></div>
+                  <div className="preview-session-shell">
+                    <div className="preview-session-progress"><span>PROSPECT 1 OF 3</span><div><i className="active" /><i /><i /></div></div>
+                    <div className="preview-prospect-title"><div><small>ROOFING · AUSTIN, TX</small><h4>{previewResults[0].name}</h4></div><em>Active business</em></div>
+                    <div className="preview-why"><small>WHY THIS IS WORTH A LOOK</small><b>No clear quote path on mobile</b><p>Established local business with public contact options and a concrete website opportunity.</p></div>
+                    <div className="preview-signal-row"><span><small>Activity</small><b>4.8 · 47 reviews</b></span><span><small>Best reach</small><b>Facebook found</b></span><span><small>Opportunity</small><b>Quote path</b></span></div>
+                    <div className="preview-contact-row"><button type="button">f&nbsp; Facebook <small>Best option</small></button><button type="button">✉&nbsp; Email</button><button type="button">↗&nbsp; Contact form</button></div>
+                    <div className="preview-session-actions"><button className="primary" type="button">Start conversation</button><button type="button">Not a fit</button></div>
                   </div>
-                  <div className="retention-preview-foot"><span>1 of 3</span><b>One business at a time. A real stopping point when you’re done.</b></div>
+                  <div className="preview-session-note"><b>One prospect at a time.</b><span>Contact the good fits, pass the bad fits, and stop when the session is done.</span></div>
                 </div>
               </div>
             </div>
@@ -181,13 +188,13 @@ export default async function Home() {
           <div className="workflow-intro">
             <div className="section-code"><span>03</span> The working session</div>
             <h2>The part between learning web development and landing the job.</h2>
-            <p>You already know how to build a site. Webvidence makes the slower part feel manageable by preparing a few worthwhile decisions and keeping the next follow-up ready.</p>
+            <p>You already know how to build a site. Webvidence helps with the slower part: preparing a small batch, finding real public contact paths, clearing follow-ups, watching a market for new businesses, and giving you a clean stopping point.</p>
             <div className="workflow-links"><Link href="/scores">What the scores mean</Link><Link href="/faq">Read the FAQ</Link></div>
           </div>
           <div className="workflow-board">
-            <article className="workflow-step offset-one"><span>01</span><div><small>PREPARE</small><h3>Get three worthwhile prospects.</h3><p>Search once or watch a market. Webvidence surfaces active businesses with real opportunities and usable public contact paths.</p></div></article>
-            <article className="workflow-step"><span>02</span><div><small>DECIDE</small><h3>Contact or pass.</h3><p>See the reason, best next action, and conversation-first draft without digging through a full audit first.</p></div></article>
-            <article className="workflow-step offset-two"><span>03</span><div><small>RETURN</small><h3>Finish and know what’s next.</h3><p>End with a clean summary. Follow-up reminders and watched markets bring you back only when useful work exists.</p></div></article>
+            <article className="workflow-step offset-one"><span>01</span><div><small>PREPARE</small><h3>Search once, then start a short session.</h3><p>Webvidence recommends one prospect first and prepares a three-prospect batch by default.</p></div></article>
+            <article className="workflow-step"><span>02</span><div><small>WORK</small><h3>Review, contact, or legitimately pass.</h3><p>Use verified website evidence and discovered public contact paths. Passing a poor fit still counts as useful progress.</p></div></article>
+            <article className="workflow-step offset-two"><span>03</span><div><small>RETURN</small><h3>Finish cleanly and know when to come back.</h3><p>Set your prospecting days and session size. Optional email reminders can bring you back for due follow-ups, fresh watched-market prospects, or unfinished work.</p></div></article>
           </div>
         </section>
 
@@ -200,8 +207,8 @@ export default async function Home() {
         </section>
 
         <section className="final-cta">
-          <div className="shell final-cta-inner"><div><div className="section-code"><span>05</span> Try the routine</div><h2>Work your first three prospects.</h2><p>No card needed for the free plan.</p></div>
-          <Link className="action primary large" href={viewer ? '/dashboard' : '/signup'}><span>{viewer ? 'Open today' : 'Start your first session'}</span><b>↗</b></Link></div>
+          <div className="shell final-cta-inner"><div><div className="section-code"><span>05</span> Try a real search</div><h2>Find out whether it saves you time.</h2><p>No card needed for the free plan.</p></div>
+          <Link className="action primary large" href={viewer ? '/dashboard/campaigns' : '/signup'}><span>{viewer ? 'Find another market' : 'Start free'}</span><b>↗</b></Link></div>
         </section>
       </main>
       <MarketingFooter />

@@ -2,8 +2,7 @@ import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { requireViewer } from '@/lib/security/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { RoutinePrompt } from '@/components/routine-prompt';
-import Link from 'next/link';
+import { RoutineSettingsForm } from '@/components/routine-settings-form';
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const user = await requireViewer();
@@ -16,6 +15,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     .eq('is_default', true)
     .order('updated_at', { ascending: false })
     .limit(1)
+    .maybeSingle();
+  const { data: routine } = await db.from('prospecting_routines')
+    .select('days_of_week,preferred_time,session_size,reminder_email_enabled,weekly_routine_enabled,prospecting_area_location,prospecting_area_radius_miles')
+    .eq('user_id', user.id)
+    .eq('workspace_id', user.workspaceId)
     .maybeSingle();
 
   async function save(formData: FormData) {
@@ -48,11 +52,10 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   return (
     <AppShell admin={user.isAdmin}>
       <div className="topline">
-        <div><div className="eyebrow">Settings</div><h2>Your routine and outreach</h2></div>
+        <div><div className="eyebrow">Profile</div><h2>Outreach settings</h2></div>
         <span className="tag">{user.email}</span>
       </div>
-      <section className="settings-routine" id="reminders"><div><span className="session-kicker">Prospecting routine</span><h3>When should the next batch be ready?</h3><p>Reminder emails are sent only when a session, follow-up, or watched-market result is actually ready.</p></div><RoutinePrompt /></section>
-      <div className="settings-section-heading"><span className="session-kicker">Optional personalization</span><h3>Make drafts sound more like you.</h3><p>Webvidence can prepare a useful first draft without this. Add these details when you want more personalization.</p></div>
+      <p className="muted settings-intro">These details personalize who you help, where you work, pricing, and tone. They never decide whether a draft starts a conversation or uses a website finding.</p>
       {params.saved === '1' ? <div className="notice">Outreach profile saved. New drafts will use these settings.</div> : null}
       <form className="form settings-form" action={save}>
         <input type="hidden" name="profileId" value={profile?.id || ''} />
@@ -65,7 +68,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <label><span>Your natural outreach style</span><textarea className="input" name="outreachStyle" rows={6} defaultValue={profile?.outreach_style || ''} placeholder="Plainspoken, local, short, one real observation, one question, no immediate hard pitch." /></label>
         <button className="btn primary">Save outreach profile</button>
       </form>
-      <div className="settings-account-links"><Link href="/dashboard/billing">Billing and plan</Link><Link href="/feedback">Share product feedback</Link></div>
+      <section className="settings-routine-section">
+        <RoutineSettingsForm initialRoutine={routine} />
+      </section>
     </AppShell>
   );
 }

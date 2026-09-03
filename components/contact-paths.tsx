@@ -12,20 +12,36 @@ const LABELS: Record<ContactPath['kind'], string> = {
   tiktok: 'TikTok', youtube: 'YouTube', form: 'Contact form', phone: 'Phone',
 };
 
+const ICONS: Record<ContactPath['kind'], string> = {
+  email: '✉', facebook: 'f', instagram: '◎', linkedin: 'in', tiktok: '♪', youtube: '▶', form: '↗', phone: '☎',
+};
+
+const PRIORITY: ContactPath['kind'][] = ['facebook', 'email', 'form', 'phone', 'instagram', 'linkedin', 'tiktok', 'youtube'];
+
 export function ContactPaths({ paths }: { paths: ContactPath[] }) {
   if (!paths.length) return null;
+  const sorted = [...paths].sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
+  const bestId = sorted.find((path) => Boolean(contactHref(path)))?.id || null;
+
   return (
     <section className="contact-paths" aria-label="Ways to reach this business">
-      <div className="contact-paths-head"><span className="eyebrow">Ways to reach them</span><b>Public contact paths found on their website</b></div>
+      <div className="contact-paths-head">
+        <div><span className="eyebrow">Ways to reach them</span><b>Use a real public contact path</b></div>
+        <small>Found on the business&apos;s public website</small>
+      </div>
       <div className="contact-path-list">
-        {paths.map((path) => {
+        {sorted.map((path) => {
           const href = contactHref(path);
-          return href ? <a key={path.id} className="contact-path-chip" href={href} target={path.kind === 'phone' || path.kind === 'email' ? undefined : '_blank'} rel="noreferrer">
-            <b>{path.kind === 'form' && path.value ? path.value : LABELS[path.kind]}</b><span>{path.kind === 'form' ? compactUrl(path.url || path.source_url) : path.value || compactUrl(path.url || path.source_url)}</span>
-          </a> : null;
+          if (!href) return null;
+          const isBest = path.id === bestId;
+          return <a key={path.id} className={`contact-path-chip ${isBest ? 'contact-path-best' : ''}`} href={href} target={path.kind === 'phone' || path.kind === 'email' ? undefined : '_blank'} rel="noreferrer">
+            <span className="contact-path-icon" aria-hidden="true">{ICONS[path.kind]}</span>
+            <span className="contact-path-copy"><b>{path.kind === 'form' && path.value ? path.value : LABELS[path.kind]}</b><small>{path.kind === 'form' ? compactUrl(path.url || path.source_url) : path.value || compactUrl(path.url || path.source_url)}</small></span>
+            {isBest ? <em>Best option</em> : null}
+          </a>;
         })}
       </div>
-      {paths.some((path) => path.kind === 'email') ? <small className="contact-path-note">Email addresses were found on the business’s public site. Confirm the recipient before sending.</small> : null}
+      {paths.some((path) => path.kind === 'email') ? <small className="contact-path-note">Public email found. Confirm the recipient before sending.</small> : null}
     </section>
   );
 }

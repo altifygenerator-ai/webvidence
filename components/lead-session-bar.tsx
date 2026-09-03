@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const REASONS = [
-  ['strong_existing_site', 'Strong existing site'],
-  ['wrong_business_type', 'Wrong type of business'],
-  ['no_contact_path', 'No usable contact path'],
-  ['business_inactive', 'Business appears inactive'],
+  ['strong_existing_site', 'Strong site'],
+  ['wrong_business_type', 'Wrong business'],
+  ['no_contact_path', 'No contact path'],
+  ['business_inactive', 'Looks inactive'],
   ['not_enough_opportunity', 'Not enough opportunity'],
   ['other', 'Other'],
 ] as const;
@@ -22,23 +22,25 @@ export function LeadSessionBar(props: {
 }) {
   const router = useRouter();
   const [passing, setPassing] = useState(false);
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busyReason, setBusyReason] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     void fetch('/api/sessions/work', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId: props.sessionId, leadId: props.leadId, action: 'start' }),
     }).catch(() => undefined);
   }, [props.sessionId, props.leadId]);
 
-  async function passLead() {
-    setBusy(true); setError('');
+  async function passLead(reason: string | null) {
+    setBusyReason(reason || 'skip');
+    setError('');
     try {
       const response = await fetch('/api/sessions/work', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId: props.sessionId, leadId: props.leadId, action: 'passed', passReason: reason || null }),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: props.sessionId, leadId: props.leadId, action: 'passed', passReason: reason }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not pass this prospect.');
@@ -49,32 +51,35 @@ export function LeadSessionBar(props: {
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not pass this prospect.');
-      setBusy(false);
+      setBusyReason('');
     }
   }
 
   return (
-    <section className="lead-session-bar" aria-label="Prospecting session progress">
+    <section className="lead-session-bar session-focus-bar" aria-label="Prospecting session progress">
       <div className="lead-session-progress">
         <span className="eyebrow">Prospecting session</span>
-        <b>Prospect {Math.min(props.position, props.targetSize)} of {props.targetSize}</b>
-        <small>{props.workedCount} already worked · contacted or legitimately passed both count</small>
+        <div className="session-progress-line">
+          <b>Prospect {Math.min(props.position, props.targetSize)} of {props.targetSize}</b>
+          <div className="session-dot-row" aria-hidden="true">
+            {Array.from({ length: props.targetSize }, (_, index) => <i key={index} className={index < props.workedCount ? 'done' : index === props.position - 1 ? 'current' : ''} />)}
+          </div>
+        </div>
       </div>
       <div className="lead-session-actions">
         {!passing ? (
-          <button className="btn" type="button" onClick={() => setPassing(true)}>Not a fit</button>
+          <button className="btn quiet session-pass-toggle" type="button" onClick={() => setPassing(true)}>Not a fit</button>
         ) : (
-          <div className="pass-control">
-            <select className="input" aria-label="Optional pass reason" value={reason} onChange={(event) => setReason(event.target.value)}>
-              <option value="">Reason optional</option>
-              {REASONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-            <button className="btn primary" type="button" disabled={busy} onClick={() => void passLead()}>{busy ? 'Moving on…' : 'Pass & next'}</button>
-            <button className="btn quiet" type="button" disabled={busy} onClick={() => setPassing(false)}>Cancel</button>
+          <div className="pass-reason-panel" aria-label="Optional reason for passing">
+            <div className="pass-reason-head"><span>Why are you passing?</span><button type="button" onClick={() => setPassing(false)} aria-label="Close pass reasons">×</button></div>
+            <div className="pass-reason-chips">
+              {REASONS.map(([value, label]) => <button key={value} type="button" disabled={Boolean(busyReason)} onClick={() => void passLead(value)}>{busyReason === value ? 'Passing…' : label}</button>)}
+              <button type="button" className="pass-skip" disabled={Boolean(busyReason)} onClick={() => void passLead(null)}>{busyReason === 'skip' ? 'Passing…' : 'Skip reason'}</button>
+            </div>
           </div>
         )}
       </div>
-      {error ? <div className="notice notice-error">{error}</div> : null}
+      {error ? <div className="notice notice-error session-bar-error">{error}</div> : null}
     </section>
   );
 }

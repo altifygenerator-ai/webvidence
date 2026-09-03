@@ -12,8 +12,8 @@ describe('retention security and delivery boundaries', () => {
   });
 
   it('rechecks reminder preferences and claims a unique delivery before Resend', () => {
-    const reminders = source('lib/retention/reminders.ts');
-    const prefCheck = reminders.indexOf("if (!current?.reminder_email_enabled) return 0");
+    const reminders = source('lib/jobs/retention.ts');
+    const prefCheck = reminders.indexOf("if (!current?.reminder_emails_enabled || current.unsubscribed_at) return 0");
     const claim = reminders.indexOf("db.from('reminder_deliveries').insert");
     const send = reminders.indexOf("fetch('https://api.resend.com/emails'");
     expect(prefCheck).toBeGreaterThan(-1);
@@ -29,7 +29,7 @@ describe('retention security and delivery boundaries', () => {
   });
 
   it('keeps reminder and session analytics free of message/reply body content', () => {
-    const reminders = source('lib/retention/reminders.ts');
+    const reminders = source('lib/jobs/retention.ts');
     const sessions = source('lib/retention/session.ts');
     expect(reminders).not.toContain('body: input.');
     expect(sessions).not.toContain('messageBody');

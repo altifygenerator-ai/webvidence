@@ -12,9 +12,7 @@ const nav = [
   ['Settings', '/dashboard/settings', '04'],
 ] as const;
 
-const quickNav = nav.slice(0, 3);
-
-export function AppShell({ children, admin = false, focused = false }: { children: React.ReactNode; admin?: boolean; focused?: boolean }) {
+export function AppShell({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
   const router = useRouter();
   const [pipelineActionCount, setPipelineActionCount] = useState(0);
 
@@ -38,24 +36,24 @@ export function AppShell({ children, admin = false, focused = false }: { childre
   );
 
   return (
-    <div className={focused ? 'app-frame app-frame-focused' : 'app-frame'}>
+    <div className="app-frame">
       <aside className="app-sidebar">
         <div>
           <Link className="wordmark app-wordmark" href="/dashboard"><span>WEB</span><i>V</i><span>IDENCE</span></Link>
-          <p className="sidebar-kicker">YOUR PROSPECTING ROUTINE</p>
+          <p className="sidebar-kicker">PROSPECTING WORKSPACE</p>
         </div>
-        <nav className="app-nav">
+        <nav className="app-nav" aria-label="Workspace navigation">
           {nav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
-          {admin && <Link href="/dashboard/admin"><small>05</small><span>Admin control</span></Link>}
+          {admin && <Link href="/dashboard/admin"><small>05</small><span>Admin</span></Link>}
         </nav>
         <div className="sidebar-foot">
-          <div className="workspace-status"><span className="live-dot" /> Protected workspace</div>
-          <small>Searches, audits, outreach drafts, and plan access are checked on the server.</small>
+          <div className="workspace-status"><span className="live-dot" /> Private workspace</div>
+          <small>Your prospects, contact paths, notes, and outreach history stay inside your workspace.</small>
+          <Link className="sidebar-home" href="/dashboard/billing">Plan &amp; billing</Link>
           <Link className="sidebar-home" href="/feedback">Share feedback</Link>
-          <Link className="sidebar-home" href="/dashboard/billing">Billing & plan</Link>
           <Link className="sidebar-home" href="/">Public homepage</Link>
           <form action="/auth/logout" method="post">
-            <button className="logout-button" type="submit">Log out of Webvidence</button>
+            <button className="logout-button" type="submit">Log out</button>
           </form>
         </div>
       </aside>
@@ -63,32 +61,29 @@ export function AppShell({ children, admin = false, focused = false }: { childre
       <header className="mobile-app-header">
         <Link className="wordmark mobile-app-wordmark" href="/dashboard"><span>WEB</span><i>V</i><span>IDENCE</span></Link>
         <details className="mobile-app-menu">
-          <summary aria-label="Open workspace menu"><span>Menu</span><i aria-hidden="true" /></summary>
+          <summary aria-label="Open workspace menu"><span>More</span><i aria-hidden="true" /></summary>
           <div className="mobile-app-menu-panel">
             <nav>
               {nav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
-              {admin && <Link href="/dashboard/admin"><small>05</small><span>Admin control</span></Link>}
+              <Link href="/dashboard/billing"><small>05</small><span>Plan &amp; billing</span></Link>
+              {admin && <Link href="/dashboard/admin"><small>06</small><span>Admin</span></Link>}
             </nav>
             <div className="mobile-menu-foot">
               <Link href="/feedback">Share feedback</Link>
-              <Link href="/dashboard/billing">Billing & plan</Link>
               <Link href="/">Public homepage</Link>
-              <form action="/auth/logout" method="post">
-                <button type="submit">Log out</button>
-              </form>
+              <form action="/auth/logout" method="post"><button type="submit">Log out</button></form>
             </div>
           </div>
         </details>
       </header>
 
       <main className="app-main">
-        {!focused ? <div className="app-topbar"><span>WEBVIDENCE</span><span>Workspace / Primary</span></div> : null}
+        <div className="app-topbar"><span>WEBVIDENCE</span><span>Focused prospecting</span></div>
         {children}
       </main>
 
       <nav className="mobile-quick-nav" aria-label="Workspace shortcuts">
-        {quickNav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
-        <Link href="/dashboard/settings"><small>04</small><span>More</span></Link>
+        {nav.map(([label, href, num]) => <Link key={href} href={href}><small>{num}</small>{navLabel(label)}</Link>)}
       </nav>
     </div>
   );

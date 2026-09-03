@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { assertTrustedMutation, RequestSecurityError } from '@/lib/security/request';
 import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/rate-limit';
 import { buildOutcomeLeadUpdate, LEAD_OUTCOMES } from '@/lib/leads/priority';
+import { logApiUsage } from '@/lib/data/api-usage';
 
 const leadStatuses = [
   'new', 'reviewing', 'ready_to_contact', 'contacted', 'replied', 'interested', 'follow_up',
@@ -18,6 +19,7 @@ const schema = z.object({
   leadOutcome: z.enum(LEAD_OUTCOMES).nullable().optional(),
   manualReviewCompleted: z.literal(true).optional(),
   businessObservation: z.string().trim().max(1000).nullable().optional(),
+  reviewed: z.literal(true).optional(),
 });
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -33,7 +35,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     const db = createAdminClient();
 
     const { data: current, error: currentError } = await db.from('leads')
-      .select('id,status,first_contacted_at,last_contacted_at')
+      .select('id,status,first_contacted_at,last_contacted_at,last_reviewed_at')
       .eq('id', id)
       .eq('workspace_id', user.workspaceId)
       .maybeSingle();
@@ -50,9 +52,16 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       if (input.nextFollowUpAt) update.follow_up_stopped_at = null;
     }
 
+    if (input.reviewed) {
+      update.last_reviewed_at = changedAt;
+      update.last_worked_at = changedAt;
+    }
+
     if (input.manualReviewCompleted) {
       update.manual_review_required = false;
       update.manual_review_reason = null;
+      update.last_reviewed_at = changedAt;
+      update.last_worked_at = changedAt;
     }
 
     if (input.status === 'contacted' && !current.last_contacted_at) {
@@ -75,6 +84,15 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       .select('id,status,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,lead_outcome_updated_at,follow_up_step,follow_up_stopped_at,manual_review_required,manual_review_reason')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (input.reviewed && !current.last_reviewed_at) {
+      await logApiUsage({
+        workspaceId: user.workspaceId,
+        userId: user.id,
+        provider: 'webvidence_event',
+        operation: 'lead_work_started',
+        metadata: { leadId: id, source: 'direct_review' },
+      });
+    }
     return NextResponse.json({ lead: data });
   } catch (error) {
     if (error instanceof RateLimitError) return NextResponse.json({ error: error.message }, { status: 429, headers: { 'retry-after': String(error.retryAfter) } });

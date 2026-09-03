@@ -10,7 +10,7 @@ const STEP_INDEX: Record<OnboardingStage, number> = { first_search: 0, review: 1
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 type SessionItem = { lead_id: string; position: number; status: string; leads?: { name?: string } | Array<{ name?: string }> | null };
-type Routine = { days: number[]; preferredTime: string; sessionSize: number; remindersEnabled: boolean } | null;
+type Routine = { days: number[]; preferredTime: string; sessionSize: number; remindersEnabled: boolean; areaLocation?: string | null; areaRadiusMiles?: number } | null;
 
 type Stats = {
   reviewed: number;
@@ -75,17 +75,14 @@ export function TodaySession(props: {
           <Metric value={props.stats.sessionsCompleted} label="sessions" />
         </div>
         <div className="today-complete-footer">
-          <span>{routineSummary(props.routine)}</span>
+          <span>{routineSummary(props.routine)}{areaSummary(props.routine) ? <> · {areaSummary(props.routine)}</> : null}</span>
           <div className="today-complete-actions">
-            {props.queueCount > 0 ? (
-              <button className="btn" type="button" disabled={busy} onClick={() => void startSession()}>
-                {busy ? 'Preparing…' : 'Start another session'}
-              </button>
-            ) : (
-              <Link className="btn" href="/dashboard/campaigns">Find more prospects</Link>
-            )}
+            <button className="btn today-start-another" type="button" disabled={busy} onClick={() => void startSession()}>
+              {busy ? 'Checking your market…' : 'Start another session'}
+            </button>
             {!props.routine ? <Link className="btn primary" href="/dashboard/settings#routine">Set next routine</Link> : null}
             <Link className="btn quiet" href="/dashboard/leads">View pipeline</Link>
+            {props.queueCount === 0 ? <Link className="btn quiet" href="/dashboard/campaigns">Find more prospects</Link> : null}
           </div>
         </div>
         {error ? <div className="notice notice-error">{error}</div> : null}
@@ -122,6 +119,7 @@ export function TodaySession(props: {
           : <button className="btn primary today-primary-action" type="button" disabled={busy} onClick={() => void startSession()}>{busy ? 'Preparing…' : 'Start session'}</button>}
         <span className="today-routine-line">{routineSummary(props.routine)}</span>
       </div>
+      {areaSummary(props.routine) ? <div className="today-area-line"><span>Automatic area: {areaSummary(props.routine)}</span><Link href="/dashboard/settings#routine">Change</Link></div> : null}
 
       {props.stage !== 'active' ? (
         <div className="today-onboarding-compact" aria-label="Onboarding progress">
@@ -166,6 +164,12 @@ function routineSummary(routine: Routine) {
   if (!routine) return 'No routine set yet';
   const days = routine.days.map((day) => DAY_LABELS[day]).join(', ');
   return `${days || 'Selected days'} · ${String(routine.preferredTime || '09:00').slice(0, 5)}${routine.remindersEnabled ? ' · reminders on' : ''}`;
+}
+
+function areaSummary(routine: Routine) {
+  if (!routine?.areaLocation) return '';
+  const location = routine.areaLocation.split(',').slice(0, 2).join(',').trim() || routine.areaLocation;
+  return `${location} · ${Number(routine.areaRadiusMiles || 25)} mi`;
 }
 
 function onboardingText(stage: OnboardingStage) {

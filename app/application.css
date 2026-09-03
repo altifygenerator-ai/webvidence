@@ -4720,3 +4720,124 @@ body:has(.send-confirm-layer) {
 .app-frame .routine-compact-reminder{padding:4px 0}.app-frame .routine-settings-compact>.btn.primary{justify-self:start}
 @media(max-width:430px){.app-frame .routine-compact-presets{grid-template-columns:1fr}.app-frame .routine-settings-compact>.btn.primary{justify-self:stretch;width:100%}.app-frame .routine-compact-time{max-width:none}}
 .price .usage-limit-label{margin-top:8px;padding-top:10px;border-top:1px solid rgba(127,141,150,.22);color:#77858e;font-size:9px;font-weight:900;letter-spacing:.7px;text-transform:uppercase}
+
+/* Prospecting-area guardrail */
+.app-frame .prospecting-area-settings{display:grid;gap:12px;padding:16px;border:1px solid #2b3840;border-radius:14px;background:#0b1217}
+.app-frame .prospecting-area-copy{display:grid;gap:4px}
+.app-frame .prospecting-area-copy h4{margin:0;font-size:17px;line-height:1.25}
+.app-frame .prospecting-area-copy p{margin:0;max-width:72ch;color:#81909a;font-size:12px;line-height:1.55}
+.app-frame .prospecting-area-fields{display:grid;grid-template-columns:minmax(0,2fr) minmax(140px,.7fr);gap:10px}
+.app-frame .prospecting-area-fields label{display:grid;gap:6px;min-width:0}
+.app-frame .prospecting-area-fields label>span{color:#7f8c96;font-size:10px;font-weight:800;text-transform:uppercase}
+.app-frame .prospecting-area-settings>small{color:#6f7e87;font-size:10px;line-height:1.45}
+.app-frame .today-area-line{display:flex;align-items:center;gap:8px;margin-top:-10px;color:#7d8b95;font-size:11px}
+.app-frame .today-area-line a{color:#9fc8c7;text-decoration:none;font-weight:800}
+.app-frame .today-start-another{border-color:#47636a}
+@media(max-width:760px){
+  .app-frame .prospecting-area-fields{grid-template-columns:1fr}
+  .app-frame .today-area-line{align-items:flex-start;justify-content:space-between;margin-top:-6px}
+  .app-frame .today-start-another{width:100%}
+}
+@media(max-width:430px){
+  .app-frame .prospecting-area-settings{padding:13px}
+  .app-frame .today-area-line{font-size:10px}
+}
+
+/* --------------------------------------------------------------------------
+   Final mobile hardening pass — September 2026
+   Keeps the session loop usable at 320/375/390/430 widths and small-height
+   mobile browsers without changing desktop behavior or product logic.
+   -------------------------------------------------------------------------- */
+@media(max-width:760px){
+  .app-frame .mobile-app-menu-panel{
+    max-height:calc(100dvh - var(--app-mobile-header-height) - 12px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+  .app-frame #outreach,
+  .app-frame #outreach-composer,
+  .app-frame #draft-desk,
+  .app-frame #routine{
+    scroll-margin-top:calc(var(--app-mobile-header-height) + 112px);
+  }
+  .app-frame .session-focus-bar{
+    max-height:calc(100dvh - var(--app-mobile-header-height) - 18px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+  .app-frame .routine-day-picker button,
+  .app-frame .routine-presets button,
+  .app-frame .pass-reason-chips button{
+    min-height:44px;
+  }
+  .app-frame input,
+  .app-frame select,
+  .app-frame textarea{
+    font-size:16px;
+  }
+  .app-frame .today-session-card,
+  .app-frame .lead-decision-card,
+  .app-frame .outreach-panel,
+  .app-frame .prospecting-area-settings,
+  .app-frame .dashboard-watched-card{
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+  }
+}
+
+@media(max-width:430px){
+  .app-frame .today-onboarding-steps{
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:3px;
+    overflow:visible;
+    padding-bottom:0;
+  }
+  .app-frame .today-onboarding-steps span{
+    min-width:0;
+    flex-direction:column;
+    justify-content:flex-start;
+    gap:4px;
+    font-size:8px;
+    line-height:1.15;
+    letter-spacing:.15px;
+    text-align:center;
+    overflow-wrap:anywhere;
+  }
+  .app-frame .today-onboarding-steps span i{width:6px;height:6px}
+  .app-frame .today-area-line a{
+    display:inline-flex;
+    align-items:center;
+    min-height:44px;
+    padding-inline:4px;
+  }
+}
+
+@media(max-width:390px){
+  .app-frame .mobile-menu-foot{grid-template-columns:1fr}
+  .app-frame .mobile-menu-foot form{width:100%}
+  .app-frame .pass-reason-chips{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app-frame .pass-reason-chips .pass-skip{grid-column:1/-1}
+}
+
+@media(max-width:375px){
+  .app-frame .today-area-line{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:2px;
+  }
+  .app-frame .today-area-line a{margin-left:-4px}
+  .app-frame .pass-reason-chips{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app-frame .pass-reason-chips .pass-skip{grid-column:1/-1}
+}
+
+@media(max-width:320px){
+  .app-frame .mobile-app-header{padding-inline:11px}
+  .app-frame .mobile-app-wordmark{font-size:16px}
+  .app-frame .mobile-app-wordmark i{width:21px;height:25px}
+  .app-frame .mobile-app-menu>summary{padding-inline:10px}
+  .app-frame .mobile-quick-nav a{font-size:9px}
+  .app-frame .today-onboarding-steps span{font-size:7px}
+  .app-frame .pass-reason-chips{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app-frame .pass-reason-chips .pass-skip{grid-column:1/-1}
+}

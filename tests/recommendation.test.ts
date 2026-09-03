@@ -37,6 +37,7 @@ describe('contact recommendations', () => {
 
   it('does not recommend contacted, blocked, or still-running leads', () => {
     expect(getContactRecommendation({ ...baseLead, status: 'contacted' })).toBeNull();
+    expect(getContactRecommendation({ ...baseLead, passedAt: new Date().toISOString() })).toBeNull();
     expect(getContactRecommendation({ ...baseLead, auditStatus: 'running', audit: null })).toBeNull();
     expect(
       getContactRecommendation({

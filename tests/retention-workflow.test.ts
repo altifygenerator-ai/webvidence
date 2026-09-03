@@ -9,8 +9,8 @@ describe('retention workflow', () => {
     const campaigns = source('app/dashboard/campaigns/page.tsx');
     const composer = source('components/outreach-composer.tsx');
     expect(today).toContain('actionsReady');
-    expect(today).toContain('sessions completed');
-    expect(today).not.toContain('Start another session');
+    expect(today).toContain('sessionsCompleted');
+    expect(today).toContain('Start another session');
     expect(today).toContain('reviewed');
     expect(today).toContain('passed');
     expect(campaigns).not.toContain('0 of 5 contacted today');
@@ -30,8 +30,9 @@ describe('retention workflow', () => {
   it('supports optional pass reasons and advances directly to the next prospect', () => {
     const bar = source('components/lead-session-bar.tsx');
     const route = source('app/api/sessions/work/route.ts');
-    expect(bar).toContain('Reason optional');
-    expect(bar).toContain('Pass & next');
+    expect(bar).toContain('Optional reason for passing');
+    expect(bar).toContain('pass-reason-chips');
+    expect(bar).toContain('Skip reason');
     expect(bar).toContain('data.nextLeadId');
     expect(route).toContain('passReason: z.enum(PASS_REASONS).nullable().optional()');
   });
@@ -51,11 +52,12 @@ describe('retention workflow', () => {
 
   it('gives Free one watched market and feeds unseen businesses into new leads', () => {
     const route = source('app/api/watched-markets/route.ts');
-    const markets = source('lib/retention/markets.ts');
+    const markets = source('lib/jobs/retention.ts');
     expect(route).toContain("user.plan === 'free'");
     expect(route).toContain('Free includes one watched market');
-    expect(markets).toContain('excludePlaceIds: seen');
-    expect(markets).toContain("operation: 'new_prospects_surfaced'");
+    expect(markets).toContain("db.from('watched_markets')");
+    expect(markets).toContain('excludePlaceIds:');
+    expect(markets).toContain("'new_prospects_surfaced'");
   });
 
   it('uses source-of-truth activity for weekly counts instead of session-only reply/contact stats', () => {
@@ -66,10 +68,9 @@ describe('retention workflow', () => {
   });
 
   it('deep-links external reminders to exact work where possible', () => {
-    const reminders = source('lib/retention/reminders.ts');
-    expect(reminders).toContain('?session=${session.id}&from=reminder#outreach');
-    expect(reminders).toContain('?from=reminder#outreach');
-    expect(reminders).toContain("actionLabel: 'Work next prospect'");
-    expect(reminders).toContain("targetPath: exact");
+    const reminders = source('lib/jobs/retention.ts');
+    expect(reminders).toContain('nextSessionPath');
+    expect(reminders).toContain('?session=${sessionId}#outreach');
+    expect(reminders).toContain('Open the task: ${taskUrl}');
   });
 });

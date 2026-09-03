@@ -62,15 +62,27 @@ describe('product-ready prospecting flow', () => {
     expect(routine).toContain('routine-customize');
   });
 
-  it('keeps the reminder import paired with an exported session starter', () => {
-    const session = source('lib/retention/session.ts');
+  it('keeps retention jobs consolidated behind compatibility wrappers', () => {
     const reminders = source('lib/retention/reminders.ts');
-    expect(session).toContain('export async function startProspectingSession');
-    expect(reminders).toContain("import { startProspectingSession } from '@/lib/retention/session'");
+    const markets = source('lib/retention/markets.ts');
+    expect(reminders).toContain("import { sendUsefulReminders } from '@/lib/jobs/retention'");
+    expect(markets).toContain("import { refreshDueMarkets } from '@/lib/jobs/retention'");
+    expect(reminders).not.toContain('startProspectingSession');
   });
 
   it.each([760, 430, 390, 375, 320])('retains a responsive guard at %spx', (width) => {
     const css = source('app/application.css');
     expect(css).toContain(`@media(max-width:${width}px)`);
+  });
+
+  it('hardens the session workflow for narrow and short mobile viewports', () => {
+    const css = source('app/application.css');
+    expect(css).toContain('Final mobile hardening pass');
+    expect(css).toContain('scroll-margin-top:calc(var(--app-mobile-header-height) + 112px)');
+    expect(css).toContain('max-height:calc(100dvh - var(--app-mobile-header-height) - 18px)');
+    expect(css).toContain('.app-frame .pass-reason-chips{grid-template-columns:repeat(2,minmax(0,1fr))}');
+    expect(css).toContain('.app-frame .routine-day-picker button,');
+    expect(css).toContain('min-height:44px');
+    expect(css).toContain('font-size:16px');
   });
 });

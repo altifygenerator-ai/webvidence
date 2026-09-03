@@ -33,6 +33,8 @@ type PipelineLead = {
   lead_outcome: LeadOutcome | null;
   manual_review_required: boolean;
   manual_review_reason: string | null;
+  passed_at: string | null;
+  pass_reason: string | null;
 };
 
 type SortKey =
@@ -47,12 +49,16 @@ type SortKey =
   | "website"
   | "never_contacted";
 
-const filters = [
-  ["all", "All active"],
+const primaryFilters = [
+  ["needs_attention", "Needs attention"],
+  ["waiting", "Waiting"],
+  ["all", "All"],
+] as const;
+
+const advancedFilters = [
   ["due", "Due today"],
   ["overdue", "Overdue"],
   ["never_contacted", "Never contacted"],
-  ["waiting", "Waiting on reply"],
   ["complete", "Sequence complete"],
   ["interested", "Replies / interest"],
   ["proposal", "Proposal sent"],
@@ -80,7 +86,7 @@ export default async function Leads({
   const user = await requireViewer();
   const {
     view,
-    filter = "all",
+    filter = "needs_attention",
     sort: requestedSort = "priority",
   } = await searchParams;
   const archived = view === "archived";
@@ -90,7 +96,7 @@ export default async function Leads({
   let query = supabase
     .from("leads")
     .select(
-      "id,name,city,state,website,status,opportunity_score,reviews,rating,last_audited_at,created_at,updated_at,first_contacted_at,last_contacted_at,next_follow_up_at,follow_up_step,follow_up_stopped_at,lead_outcome,manual_review_required,manual_review_reason",
+      "id,name,city,state,website,status,opportunity_score,reviews,rating,last_audited_at,created_at,updated_at,first_contacted_at,last_contacted_at,next_follow_up_at,follow_up_step,follow_up_stopped_at,lead_outcome,manual_review_required,manual_review_reason,passed_at,pass_reason",
     )
     .eq("workspace_id", user.workspaceId)
     .limit(500);
@@ -175,28 +181,30 @@ export default async function Leads({
         </div>
       </div>
 
-      <section className="pipeline-controls" aria-label="Pipeline controls">
+      <section className="pipeline-controls pipeline-controls-clean" aria-label="Pipeline controls">
         {!archived ? (
-          <nav className="pipeline-filters" aria-label="Pipeline filters">
-            {filters.map(([value, label]) => (
-              <Link
-                className={filter === value ? "active" : ""}
-                key={value}
-                href={pipelineHref({ filter: value, sort })}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        ) : (
-          <div />
-        )}
+          <div className="pipeline-filter-stack">
+            <nav className="pipeline-filters pipeline-primary-filters" aria-label="Pipeline filters">
+              {primaryFilters.map(([value, label]) => (
+                <Link className={filter === value ? "active" : ""} key={value} href={pipelineHref({ filter: value, sort })}>{label}</Link>
+              ))}
+            </nav>
+            <details className="pipeline-more-filters">
+              <summary>More filters</summary>
+              <nav aria-label="More pipeline filters">
+                {advancedFilters.map(([value, label]) => (
+                  <Link className={filter === value ? "active" : ""} key={value} href={pipelineHref({ filter: value, sort })}>{label}</Link>
+                ))}
+              </nav>
+            </details>
+          </div>
+        ) : <div />}
 
         <form className="pipeline-sort-form" method="get">
           {archived ? (
             <input type="hidden" name="view" value="archived" />
           ) : null}
-          {!archived && filter !== "all" ? (
+          {!archived && filter !== "needs_attention" ? (
             <input type="hidden" name="filter" value={filter} />
           ) : null}
           <label htmlFor="pipeline-sort">Sort by</label>
@@ -223,7 +231,7 @@ export default async function Leads({
       {!error && leads.length === 0 && (
         archived || filter !== "all" ? (
           <div className="notice">
-            {archived ? "No archived prospects." : "No leads match this pipeline filter."}
+            {archived ? "No archived prospects." : filter === "needs_attention" ? "Nothing needs attention right now. Your next prepared prospects live in Today." : "No leads match this pipeline filter."}
           </div>
         ) : (
           <div className="pipeline-empty-state">
@@ -232,7 +240,7 @@ export default async function Leads({
               <h3>Businesses you keep will show up here.</h3>
               <p>Run a search, look through the results, and keep the ones you may want to contact.</p>
             </div>
-            <Link className="btn primary" href="/dashboard/campaigns">Find businesses</Link>
+            <Link className="btn primary" href="/dashboard/campaigns">Find a market</Link>
           </div>
         )
       )}
@@ -367,7 +375,7 @@ function pipelineHref({
 }) {
   const params = new URLSearchParams();
   if (view) params.set("view", view);
-  if (filter && filter !== "all" && !view) params.set("filter", filter);
+  if (filter && filter !== "needs_attention" && !view) params.set("filter", filter);
   if (sort && sort !== "priority") params.set("sort", sort);
   const query = params.toString();
   return `/dashboard/leads${query ? `?${query}` : ""}`;
@@ -399,6 +407,13 @@ function matchesFilter(
 ) {
   const due = lead.next_follow_up_at ? new Date(lead.next_follow_up_at) : null;
   const activeSequence = !lead.lead_outcome && !lead.follow_up_stopped_at;
+  if (filter === "needs_attention")
+    return Boolean(
+      lead.manual_review_required ||
+      ["replied", "interested"].includes(lead.status) ||
+      ["replied", "interested", "meeting_booked"].includes(lead.lead_outcome || "") ||
+      (activeSequence && due && due <= endToday)
+    );
   if (filter === "due")
     return Boolean(
       activeSequence && due && due >= startToday && due <= endToday,

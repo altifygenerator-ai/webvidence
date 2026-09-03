@@ -8,9 +8,8 @@ import { auditIsCurrentForWebsite } from '@/lib/leads/website';
 
 const patchSchema = z.object({
   campaignId: z.string().uuid(),
-  status: z.enum(['active', 'paused', 'archived']).optional(),
-  watched: z.boolean().optional(),
-}).refine((value) => value.status !== undefined || value.watched !== undefined);
+  status: z.enum(['active', 'paused', 'archived']),
+});
 
 const campaignIdSchema = z.string().uuid();
 
@@ -33,7 +32,7 @@ export async function GET(req: Request) {
 
   if (!requestedCampaignId) {
     const { data, error } = await db.from('campaigns')
-      .select('id,name,category,location,radius_miles,status,watched_at,next_refresh_at,last_refreshed_at,last_new_prospect_count,created_at,updated_at')
+      .select('id,name,category,location,radius_miles,status,created_at,updated_at')
       .eq('workspace_id', user.workspaceId)
       .order('updated_at', { ascending: false })
       .limit(100);
@@ -47,7 +46,7 @@ export async function GET(req: Request) {
   }
 
   const { data: campaign, error: campaignError } = await db.from('campaigns')
-    .select('id,name,category,location,radius_miles,status,watched_at,next_refresh_at,last_refreshed_at,last_new_prospect_count,created_at,updated_at')
+    .select('id,name,category,location,radius_miles,status,created_at,updated_at')
     .eq('id', parsedCampaignId.data)
     .eq('workspace_id', user.workspaceId)
     .maybeSingle();
@@ -55,7 +54,7 @@ export async function GET(req: Request) {
   if (!campaign) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
 
   const { data: leadRows, error: leadError } = await db.from('leads')
-    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,updated_at')
+    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,passed_at,pass_reason,updated_at')
     .eq('workspace_id', user.workspaceId)
     .eq('campaign_id', campaign.id)
     .neq('status', 'archived')
@@ -150,6 +149,8 @@ export async function GET(req: Request) {
       distanceMiles,
       opportunityScore: lead.opportunity_score,
       status: lead.status,
+      passedAt: lead.passed_at,
+      passReason: lead.pass_reason,
       auditStatus,
       auditJobId: job?.id || null,
       auditError: job?.error_message || null,
@@ -179,25 +180,19 @@ export async function PATCH(req: Request) {
     await enforceRateLimit(req, user.id, RATE_LIMITS.mutation);
     const input = patchSchema.parse(await req.json());
     const db = createAdminClient();
-    if (input.watched === true && !user.isAdmin) {
-      const { count } = await db.from('campaigns').select('id', { count: 'exact', head: true })
-        .eq('workspace_id', user.workspaceId).not('watched_at', 'is', null).neq('id', input.campaignId);
-      if (user.plan === 'free' && (count || 0) >= 1) return NextResponse.json({ error: 'The Free plan includes one watched market. Unwatch the current market or upgrade.' }, { status: 402 });
-    }
-    const now = new Date();
-    const update: Record<string, unknown> = { updated_at: now.toISOString() };
-    if (input.status) update.status = input.status;
-    if (input.watched !== undefined) {
-      update.watched_at = input.watched ? now.toISOString() : null;
-      update.next_refresh_at = input.watched ? new Date(now.getTime() + 7 * 86400_000).toISOString() : null;
-    }
     const { data, error } = await db.from('campaigns')
-      .update(update)
+      .update({ status: input.status, updated_at: new Date().toISOString() })
       .eq('id', input.campaignId)
       .eq('workspace_id', user.workspaceId)
-      .select('id,name,category,location,radius_miles,status,watched_at,next_refresh_at,last_refreshed_at,last_new_prospect_count,created_at,updated_at')
+      .select('id,name,category,location,radius_miles,status,created_at,updated_at')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (input.status === 'archived') {
+      await db.from('watched_markets')
+        .delete()
+        .eq('campaign_id', input.campaignId)
+        .eq('workspace_id', user.workspaceId);
+    }
     return NextResponse.json({ campaign: data });
   } catch (error) {
     if (error instanceof RateLimitError) return NextResponse.json({ error: error.message }, { status: 429, headers: { 'retry-after': String(error.retryAfter) } });

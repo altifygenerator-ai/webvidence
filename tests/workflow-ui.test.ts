@@ -27,20 +27,20 @@ describe('focused lead workflow', () => {
   it('keeps evidence and history behind progressive disclosure', () => {
     const leadPage = source('app/dashboard/leads/[id]/page.tsx');
     const composer = source('components/outreach-composer.tsx');
-    expect(leadPage).toContain('<details className="evidence-file-section evidence-disclosure">');
+    expect(leadPage).toContain('<details className="prospect-more-disclosure">');
     expect(composer).toContain('<details className="message-history-disclosure">');
     expect(composer).toContain('<details className="lead-tracking-details">');
   });
 });
 
 describe('campaign and pipeline focus', () => {
-  it('turns search results into a small prepared session', () => {
+  it('presents recommendations as businesses to review, not guaranteed buyers', () => {
     const page = source('app/dashboard/campaigns/page.tsx');
     expect(page).toContain('Prepared session');
-    expect(page).toContain('prospects are ready');
-    expect(page).toContain('StartSessionButton');
-    expect(page).toContain('Passing a poor fit counts as useful work');
-    expect(page).not.toContain('contacted today');
+    expect(page).toContain('These are the strongest prospects to work first.');
+    expect(page).toContain("item.signals.slice(0, 2)");
+    expect(page).toContain('Open details');
+    expect(page).not.toContain('Best places to start');
   });
 
   it('keeps the pipeline compact and subordinates bulk actions', () => {
@@ -69,8 +69,8 @@ describe('mobile workflow', () => {
 
   it('preserves direct email and text handoff without automatic sending', () => {
     const composer = source('components/outreach-composer.tsx');
-    expect(composer).toContain('Open email app');
-    expect(composer).toContain('Open text app');
+    expect(composer).toContain('Open email with draft');
+    expect(composer).toContain('Open text with draft');
     expect(composer).toContain('Did you send the message?');
     expect(composer).toContain('Webvidence never sends automatically');
   });
