@@ -25,26 +25,13 @@ const schema = z.object({
   prospectingRadiusMiles: z.number().int().min(5).max(100).optional(),
 });
 
-const routineSelect = [
-  'days_of_week',
-  'preferred_time',
-  'timezone_offset_minutes',
-  'session_size',
-  'reminder_email_enabled',
-  'weekly_routine_enabled',
-  'prospecting_area_location',
-  'prospecting_area_center_lat',
-  'prospecting_area_center_lng',
-  'prospecting_area_radius_miles',
-].join(',');
-
 export async function GET() {
   const user = await getViewer();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!user.workspaceId) return NextResponse.json({ error: 'Workspace missing.' }, { status: 400 });
   const db = createAdminClient();
   const { data, error } = await db.from('prospecting_routines')
-    .select(routineSelect)
+    .select('days_of_week,preferred_time,timezone_offset_minutes,session_size,reminder_email_enabled,weekly_routine_enabled,prospecting_area_location,prospecting_area_center_lat,prospecting_area_center_lng,prospecting_area_radius_miles')
     .eq('user_id', user.id)
     .eq('workspace_id', user.workspaceId)
     .maybeSingle();
@@ -136,7 +123,7 @@ export async function POST(req: Request) {
     };
 
     const { data, error } = await db.from('prospecting_routines').upsert(payload, { onConflict: 'user_id' })
-      .select(routineSelect)
+      .select('days_of_week,preferred_time,timezone_offset_minutes,session_size,reminder_email_enabled,weekly_routine_enabled,prospecting_area_location,prospecting_area_center_lat,prospecting_area_center_lng,prospecting_area_radius_miles')
       .single();
     if (error) throw new Error(error.message);
 
