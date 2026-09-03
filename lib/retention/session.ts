@@ -12,7 +12,6 @@ export const PASS_REASONS = [
 ] as const;
 
 export type PassReason = (typeof PASS_REASONS)[number];
-
 export const PASS_REASON_LABELS: Record<PassReason, string> = {
   strong_existing_site: 'Strong existing website',
   wrong_business_type: 'Wrong type of business',

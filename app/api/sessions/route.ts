@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
       const firstRemaining = (remainingItems || [])[0];
       const existingFitsArea = !area || (remainingItems || []).every((item) => {
-        const lead = relationOne<{ latitude: number | null; longitude: number | null }>(item.leads);
+        const lead = Array.isArray(item.leads) ? item.leads[0] ?? null : item.leads;
         return Boolean(lead && leadInsideProspectingArea(lead, area));
       });
 

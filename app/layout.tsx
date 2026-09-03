@@ -68,9 +68,9 @@ export const metadata: Metadata = {
     description: DEFAULT_DESCRIPTION,
     images: [absoluteUrl('/twitter-image')],
   },
-verification: {
-  google: 'm-YEgwPceFgQ86PNpzD8to3uHXX_Zhl0K5zfJQ0Loig',
-},
+  verification: {
+    google: 'm-YEgwPceFgQ86PNpzD8to3uHXX_Zhl0K5zfJQ0Loig',
+  },
 };
 
 export const viewport: Viewport = {
