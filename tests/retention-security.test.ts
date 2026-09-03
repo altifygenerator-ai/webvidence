@@ -22,6 +22,21 @@ describe('retention security and delivery boundaries', () => {
     expect(reminders).toContain("List-Unsubscribe");
   });
 
+
+  it('uses the real signed unsubscribe route and disables both reminder preference columns', () => {
+    const reminders = source('lib/jobs/retention.ts');
+    const unsubscribe = source('app/api/reminders/unsubscribe/route.ts');
+    const routine = source('app/api/routine/route.ts');
+    expect(reminders).toContain("makeReminderUnsubscribeToken");
+    expect(reminders).not.toContain("@/lib/retention/unsubscribe");
+    expect(reminders).toContain("/api/reminders/unsubscribe?u=${encodeURIComponent(routine.user_id)}&sig=${encodeURIComponent(unsubscribeSignature)}");
+    expect(reminders).toContain('/dashboard/settings#routine');
+    expect(unsubscribe).toContain('reminder_email_enabled: false');
+    expect(unsubscribe).toContain('reminder_emails_enabled: false');
+    expect(unsubscribe).toContain('unsubscribed_at: now');
+    expect(routine).toContain('unsubscribed_at: input.reminderEmailEnabled ? null');
+  });
+
   it('clears stale contact paths immediately when the website is corrected', () => {
     const websiteRoute = source('app/api/leads/website/route.ts');
     expect(websiteRoute).toContain("db.from('lead_contact_paths')");

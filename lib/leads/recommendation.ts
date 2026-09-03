@@ -21,6 +21,7 @@ export type RecommendationLead = {
   opportunityScore?: number | null;
   status?: string | null;
   passedAt?: string | null;
+  firstContactedAt?: string | null;
   audit?: RecommendationAudit | null;
   auditStatus?: string | null;
 };
@@ -81,7 +82,7 @@ export function getTopContactRecommendations<T extends RecommendationLead>(
 export function getContactRecommendation<T extends RecommendationLead>(
   lead: T,
 ): ContactRecommendation<T> | null {
-  if (lead.passedAt || CONTACTED_STATUSES.has(String(lead.status || ''))) return null;
+  if (lead.passedAt || lead.firstContactedAt || CONTACTED_STATUSES.has(String(lead.status || ''))) return null;
 
   const findings = lead.audit?.findings || [];
   if (findings.some((finding) => MANUAL_REVIEW_CODES.has(finding.code))) {

@@ -6,7 +6,7 @@ export const PASS_REASONS = [
   'strong_existing_site',
   'wrong_business_type',
   'no_contact_path',
-  'business_inactive',
+  'inactive_business',
   'not_enough_opportunity',
   'other',
 ] as const;
@@ -43,97 +43,20 @@ export function rankActionableLead(input: ActionableLeadRankInput) {
   return score;
 }
 
-const CLOSED_STATUSES = new Set([
-  'won', 'lost', 'not_interested', 'do_not_contact', 'archived',
-]);
-
-export async function startProspectingSession(
-  user: Viewer & { workspaceId: string },
-  source: 'today' | 'search' | 'watched_market' | 'reminder' | 'manual' = 'today',
-) {
-  const db = createAdminClient();
-  const existing = await getActiveSession(user.id, user.workspaceId);
-  if (existing) return existing;
-
-  const { data: routine } = await db.from('prospecting_routines')
-    .select('session_size')
-    .eq('user_id', user.id)
-    .eq('workspace_id', user.workspaceId)
-    .maybeSingle();
-  const targetSize = clampSessionSize(routine?.session_size);
-
-  const { data: leads, error: leadError } = await db.from('leads')
-    .select('id,name,status,opportunity_score,created_at,first_contacted_at,next_follow_up_at,follow_up_step,lead_outcome,manual_review_required,passed_at')
-    .eq('workspace_id', user.workspaceId)
-    .is('passed_at', null)
-    .order('created_at', { ascending: false })
-    .limit(300);
-  if (leadError) throw new Error(`Could not prepare a session: ${leadError.message}`);
-
-  const candidates = (leads || [])
-    .filter((lead) => isActionableLead(lead))
-    .sort((a, b) => candidateRank(b) - candidateRank(a))
-    .slice(0, targetSize);
-
-  if (!candidates.length) return null;
-
-  const { data: session, error: sessionError } = await db.from('prospecting_sessions')
-    .insert({
-      workspace_id: user.workspaceId,
-      user_id: user.id,
-      status: 'active',
-      source,
-      target_size: candidates.length,
-    })
-    .select('id,status,target_size,started_at')
-    .single();
-  if (sessionError) {
-    // A concurrent start may have won the one-active-session index race.
-    const raced = await getActiveSession(user.id, user.workspaceId);
-    if (raced) return raced;
-    throw new Error(`Could not start the session: ${sessionError.message}`);
-  }
-
-  const { error: itemError } = await db.from('prospecting_session_items').insert(
-    candidates.map((lead, index) => ({
-      session_id: session.id,
-      workspace_id: user.workspaceId,
-      user_id: user.id,
-      lead_id: lead.id,
-      position: index + 1,
-      status: 'pending',
-    })),
-  );
-  if (itemError) {
-    await db.from('prospecting_sessions').update({ status: 'abandoned', updated_at: new Date().toISOString() }).eq('id', session.id);
-    throw new Error(`Could not prepare session prospects: ${itemError.message}`);
-  }
-
-  await logApiUsage({
-    workspaceId: user.workspaceId,
-    userId: user.id,
-    provider: 'webvidence_event',
-    operation: 'session_started',
-    metadata: { sessionId: session.id, source, requestedSize: targetSize, preparedCount: candidates.length },
-  });
-
-  return getActiveSession(user.id, user.workspaceId);
-}
-
 export async function getActiveSession(userId: string, workspaceId: string) {
   const db = createAdminClient();
   const { data: session } = await db.from('prospecting_sessions')
-    .select('id,status,source,target_size,started_at,completed_at')
+    .select('id,status,source,campaign_id,target_size,started_at,completed_at,created_at')
     .eq('user_id', userId)
     .eq('workspace_id', workspaceId)
-    .eq('status', 'active')
-    .order('started_at', { ascending: false })
+    .in('status', ['ready', 'active'])
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!session) return null;
 
   const { data: items, error } = await db.from('prospecting_session_items')
-    .select('id,lead_id,position,status,started_at,completed_at,pass_reason,leads(id,name,city,state,status,opportunity_score,next_follow_up_at,first_contacted_at,manual_review_required)')
+    .select('id,lead_id,position,status,started_at,completed_at,pass_reason,leads(id,name,city,state,status,opportunity_score,next_follow_up_at,first_contacted_at,manual_review_required,latitude,longitude)')
     .eq('session_id', session.id)
     .eq('workspace_id', workspaceId)
     .order('position', { ascending: true });
@@ -159,7 +82,7 @@ export async function markSessionWork(options: {
     .eq('user_id', user.id)
     .maybeSingle();
   if (!session) throw new Error('Session not found.');
-  if (session.status !== 'active') return { completed: true, nextLeadId: null };
+  if (!['ready', 'active'].includes(session.status)) return { completed: true, nextLeadId: null };
 
   const { data: item } = await db.from('prospecting_session_items')
     .select('id,status,started_at,completed_at')
@@ -174,7 +97,8 @@ export async function markSessionWork(options: {
   if (action === 'start') {
     if (!item.started_at) {
       await Promise.all([
-        db.from('prospecting_session_items').update({ status: 'working', started_at: now, updated_at: now }).eq('id', item.id),
+        db.from('prospecting_sessions').update({ status: 'active', started_at: now, updated_at: now }).eq('id', sessionId).eq('workspace_id', user.workspaceId).eq('user_id', user.id).in('status', ['ready', 'active']),
+        db.from('prospecting_session_items').update({ status: 'working', started_at: now, opened_at: now, updated_at: now }).eq('id', item.id),
         db.from('leads').update({ last_reviewed_at: now, last_worked_at: now, updated_at: now }).eq('id', leadId).eq('workspace_id', user.workspaceId),
         logApiUsage({
           workspaceId: user.workspaceId,
@@ -190,10 +114,10 @@ export async function markSessionWork(options: {
 
   if (item.completed_at) return nextSessionState(sessionId, user.workspaceId, leadId);
 
-  const status = action;
+  const itemStatus = action === 'passed' ? 'passed' : 'contacted';
   const passReason = action === 'passed' ? options.passReason || null : null;
   await db.from('prospecting_session_items').update({
-    status,
+    status: itemStatus,
     started_at: item.started_at || now,
     completed_at: now,
     pass_reason: passReason,
@@ -229,7 +153,7 @@ async function nextSessionState(sessionId: string, workspaceId: string, currentL
     .order('position', { ascending: true });
 
   const all = items || [];
-  const remaining = all.filter((item) => ['pending', 'working'].includes(item.status));
+  const remaining = all.filter((item) => ['ready', 'working'].includes(item.status));
   const next = remaining.find((item) => item.lead_id !== currentLeadId) || remaining[0] || null;
   const completed = all.length > 0 && remaining.length === 0;
 
@@ -237,7 +161,7 @@ async function nextSessionState(sessionId: string, workspaceId: string, currentL
     const now = new Date().toISOString();
     const { data: closed } = await db.from('prospecting_sessions').update({
       status: 'completed', completed_at: now, updated_at: now,
-    }).eq('id', sessionId).eq('status', 'active').select('id').maybeSingle();
+    }).eq('id', sessionId).in('status', ['ready', 'active']).select('id').maybeSingle();
     if (closed && userId) {
       await logApiUsage({
         workspaceId,
@@ -250,29 +174,4 @@ async function nextSessionState(sessionId: string, workspaceId: string, currentL
   }
 
   return { completed, nextLeadId: next?.lead_id || null, items: all };
-}
-
-function clampSessionSize(value: unknown) {
-  const size = Number(value || 3);
-  return Number.isFinite(size) ? Math.max(1, Math.min(20, Math.round(size))) : 3;
-}
-
-function isActionableLead(lead: Record<string, unknown>) {
-  const status = String(lead.status || 'new');
-  if (CLOSED_STATUSES.has(status)) return false;
-  if (lead.lead_outcome && ['closed_won', 'closed_lost', 'no_response'].includes(String(lead.lead_outcome))) return false;
-  if (status === 'replied' || status === 'interested') return true;
-  const due = lead.next_follow_up_at ? Date.parse(String(lead.next_follow_up_at)) <= Date.now() : false;
-  if (due) return true;
-  return !lead.first_contacted_at;
-}
-
-function candidateRank(lead: Record<string, unknown>) {
-  const status = String(lead.status || 'new');
-  if (status === 'replied') return 10000;
-  if (status === 'interested') return 9000;
-  if (lead.next_follow_up_at && Date.parse(String(lead.next_follow_up_at)) <= Date.now()) return 8000 - Number(lead.follow_up_step || 0) * 10;
-  let rank = 5000 + Number(lead.opportunity_score || 0);
-  if (lead.manual_review_required) rank -= 250;
-  return rank;
 }

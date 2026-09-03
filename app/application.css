@@ -4841,3 +4841,87 @@ body:has(.send-confirm-layer) {
   .app-frame .pass-reason-chips{grid-template-columns:repeat(2,minmax(0,1fr))}
   .app-frame .pass-reason-chips .pass-skip{grid-column:1/-1}
 }
+
+/* --------------------------------------------------------------------------
+   Market resume / return-path hardening
+   Saved markets are real resumable workspaces: the market itself is the main
+   tap target, while pause/watch/archive remain secondary controls.
+   -------------------------------------------------------------------------- */
+.app-frame .campaign-manager-list article{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  padding:0;
+  border-bottom:1px solid #263139;
+  background:#0b1216;
+}
+.app-frame .campaign-manager-list article:last-child{border-bottom:0}
+.app-frame .campaign-manager-list article.campaign-opened{background:#0f181d;box-shadow:inset 3px 0 0 var(--cyan)}
+.app-frame .campaign-market-open{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  min-width:0;
+  min-height:72px;
+  padding:14px 16px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.app-frame .campaign-market-open:hover:not(:disabled),
+.app-frame .campaign-market-open:focus-visible{background:#121c22;outline:none}
+.app-frame .campaign-market-open:focus-visible{box-shadow:inset 0 0 0 2px var(--cyan)}
+.app-frame .campaign-market-open:disabled{cursor:wait;opacity:.7}
+.app-frame .campaign-market-open>span:first-child{display:grid;gap:3px;min-width:0}
+.app-frame .campaign-market-open b{color:#eff4f5;font-size:13px;line-height:1.3;overflow-wrap:anywhere}
+.app-frame .campaign-market-open small{color:#83919a;font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.app-frame .campaign-market-open em{color:#6f7f89;font-size:10px;font-style:normal;font-weight:700;line-height:1.35}
+.app-frame .campaign-market-open-end{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.app-frame .campaign-market-open-end i{color:var(--cyan);font-size:19px;font-style:normal;line-height:1}
+.app-frame .campaign-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:10px 12px 10px 0}
+.app-frame .campaign-actions .btn{min-height:38px;white-space:nowrap}
+.app-frame .market-result-filters{display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap}
+.app-frame .market-result-filters button{
+  min-height:36px;
+  padding:7px 10px;
+  border:1px solid #33414a;
+  border-radius:999px;
+  background:#0a1115;
+  color:#87959e;
+  font:800 10px var(--body);
+  cursor:pointer;
+}
+.app-frame .market-result-filters button:hover,
+.app-frame .market-result-filters button:focus-visible{border-color:#53636d;color:#d8e1e5;outline:none}
+.app-frame .market-result-filters button.active{border-color:#537b7b;background:#0d191b;color:#d8ffff}
+.app-frame .market-result-filters button b{margin-left:4px;color:inherit}
+.app-frame #campaign-results{scroll-margin-top:20px}
+
+@media(max-width:1024px){
+  .app-frame .campaign-manager-list article{grid-template-columns:1fr}
+  .app-frame .campaign-actions{padding:0 14px 12px;justify-content:flex-start}
+}
+
+@media(max-width:760px){
+  .app-frame #campaign-results{scroll-margin-top:calc(var(--app-mobile-header-height) + 14px)}
+  .app-frame .campaign-market-open{width:100%;min-height:76px;padding:13px 14px}
+  .app-frame .campaign-market-open-end{align-self:center}
+  .app-frame .campaign-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:7px;padding:0 14px 14px}
+  .app-frame .campaign-actions .btn{width:100%;min-width:0;min-height:44px;padding-inline:8px;white-space:normal}
+  .app-frame .market-result-filters{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .app-frame .market-result-filters button{width:100%;min-height:44px;border-radius:10px}
+}
+
+@media(max-width:520px){
+  .app-frame .campaign-actions{grid-template-columns:1fr}
+}
+
+@media(max-width:375px){
+  .app-frame .campaign-market-open{align-items:flex-start}
+  .app-frame .campaign-market-open-end{flex-direction:column;align-items:flex-end;gap:5px}
+}

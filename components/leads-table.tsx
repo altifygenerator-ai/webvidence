@@ -150,6 +150,7 @@ function formatPassReason(value?: string | null) {
     wrong_business_type: "Wrong type of business",
     no_contact_path: "No usable contact path",
     business_inactive: "Business appears inactive",
+    inactive_business: "Business appears inactive",
     not_enough_opportunity: "Not enough opportunity",
     other: "Other",
   };

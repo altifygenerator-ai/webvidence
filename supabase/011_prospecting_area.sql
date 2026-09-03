@@ -1,6 +1,7 @@
 -- WEBVIDENCE 011: PROSPECTING AREA
--- Adds an optional geographic guardrail for automatic Today sessions and watched-market refreshes.
--- Manual searches remain unrestricted and continue using the location entered on the Find screen.
+-- Adds an optional geographic guardrail for automatic Today sessions.
+-- Manual searches and watched markets keep the locations the user explicitly chose;
+-- watched-market results can feed Today only when they also fall inside this saved area.
 
 begin;
 
@@ -34,9 +35,9 @@ alter table public.prospecting_routines
     );
 
 comment on column public.prospecting_routines.prospecting_area_location is
-  'Normalized display location used to constrain automatic sessions and watched-market refreshes. Manual searches are not constrained.';
+  'Normalized display location used to constrain automatic Today sessions. Manual searches and watched-market refresh locations are not rewritten.';
 comment on column public.prospecting_routines.prospecting_area_radius_miles is
-  'Radius around the saved prospecting-area coordinates used for automatic prospect selection and watched-market refreshes.';
+  'Radius around the saved prospecting-area coordinates used for automatic Today prospect selection and watched-market eligibility.';
 
 -- Refresh PostgREST/Supabase schema cache after adding the columns.
 notify pgrst, 'reload schema';

@@ -64,6 +64,9 @@ type Props = {
   facebookContactUrl?: string | null;
   nextLeadHref?: string | null;
   nextLeadName?: string | null;
+  returnHref?: string | null;
+  returnLabel?: string | null;
+  sessionCompleteHref?: string;
   initialStatus: string;
   initialNotes: string;
   initialBusinessObservation: string;
@@ -117,6 +120,9 @@ export function OutreachComposer({
   facebookContactUrl = null,
   nextLeadHref = null,
   nextLeadName = null,
+  returnHref = null,
+  returnLabel = null,
+  sessionCompleteHref = "/dashboard?session=complete",
   initialStatus,
   initialNotes,
   initialBusinessObservation,
@@ -602,6 +608,16 @@ export function OutreachComposer({
   const mobilePrimaryAction = buildMobileAction();
 
   function buildMobileAction() {
+    // Once a prospect has been worked, mobile should continue the same flow as
+    // desktop instead of leaving a sticky "They replied" or "Record outcome"
+    // action over the obvious return/next step.
+    if (selected?.status === "sent" && sessionId) {
+      if (sessionCompleted) return <Link className="btn primary" href={sessionCompleteHref}>Finish session</Link>;
+      if (sessionNextLeadId) return <Link className="btn primary" href={nextLeadHref || `/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link>;
+    }
+    if (returnHref && !sessionId && (leadStage === "waiting" || leadStage === "closed")) {
+      return <Link className="btn primary" href={returnHref}>{returnLabel || "Back to market"}</Link>;
+    }
     if (leadStage === "closed") return <button className="btn" type="button" onClick={() => document.getElementById("lead-tracking")?.scrollIntoView({ behavior: "smooth" })}>Record outcome</button>;
     if (leadStage === "replied") return <button className="btn primary" type="button" onClick={openReplyWorkflow}>Plan response</button>;
     if (leadStage === "interested") return <button className="btn primary" type="button" onClick={() => prepareOutreach("service_intro")}>Prepare introduction</button>;
@@ -657,7 +673,8 @@ export function OutreachComposer({
               <span>{followUpAt ? `Follow-up due ${new Date(followUpAt).toLocaleString()}` : "No follow-up due date"}</span>
             </div>
             <div className="next-step-actions">
-              <button className="btn primary" type="button" onClick={openReplyWorkflow}>They replied</button>
+              {returnHref && !sessionId ? <Link className="btn primary" href={returnHref}>{returnLabel || "Back to market"}</Link> : <button className="btn primary" type="button" onClick={openReplyWorkflow}>They replied</button>}
+              {returnHref && !sessionId ? <button className="btn" type="button" onClick={openReplyWorkflow}>They replied</button> : null}
               <button className="btn" type="button" onClick={() => prepareOutreach("follow_up")}>Follow up now</button>
             </div>
           </>
@@ -682,6 +699,7 @@ export function OutreachComposer({
           <div className="outcome-summary">
             <b>{outcome ? LEAD_OUTCOME_LABELS[outcome] : status.replaceAll("_", " ")}</b>
             <span>Outreach controls are quiet because this opportunity is closed.</span>
+            {returnHref && !sessionId ? <Link className="btn primary" href={returnHref}>{returnLabel || "Back to market"}</Link> : null}
           </div>
         ) : null}
       </section> : null}
@@ -813,7 +831,11 @@ export function OutreachComposer({
           {selected.status === "sent" ? (
             <div className="sent-next-card">
               <div><span className="sent-check">Sent ✓</span><b>{sessionCompleted ? "Session complete" : "Prospect recorded"}</b><small>{sessionCompleted ? "You reached a clean stopping point. Come back for the next prepared session." : nextLeadName ? `Next prospect: ${nextLeadName}` : "The contact date and follow-up were saved."}</small></div>
-              {sessionCompleted ? <Link className="btn primary" href="/dashboard?session=complete">Finish session</Link> : sessionNextLeadId && sessionId ? <Link className="btn primary" href={`/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link> : nextLeadHref ? <Link className="btn primary" href={nextLeadHref}>Next prospect</Link> : <Link className="btn" href="/dashboard">Back to Today</Link>}
+              {sessionCompleted ? <Link className="btn primary" href={sessionCompleteHref}>Finish session</Link>
+                : sessionNextLeadId && sessionId ? <Link className="btn primary" href={nextLeadHref || `/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link>
+                  : returnHref ? <><Link className="btn primary" href={returnHref}>{returnLabel || "Back to market"}</Link>{nextLeadHref ? <Link className="btn" href={nextLeadHref}>Next unworked prospect</Link> : null}</>
+                    : nextLeadHref ? <Link className="btn primary" href={nextLeadHref}>Next prospect</Link>
+                      : <Link className="btn" href="/dashboard">Back to Today</Link>}
             </div>
           ) : null}
           {messages.filter((message) => message.direction !== "inbound").length > 1 ? (
@@ -890,7 +912,7 @@ export function OutreachComposer({
       {sessionId && leadStage === "replied" && (sessionCompleted || sessionNextLeadId) && selected?.status !== "sent" ? (
         <div className="sent-next-card session-progress-card">
           <div><span className="sent-check">Worked ✓</span><b>{sessionCompleted ? "Session complete" : "Prospect recorded"}</b><small>{sessionCompleted ? "You reached a clean stopping point." : "Move to the next prepared prospect when you are ready."}</small></div>
-          {sessionCompleted ? <Link className="btn primary" href="/dashboard?session=complete">Finish session</Link> : <Link className="btn primary" href={`/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link>}
+          {sessionCompleted ? <Link className="btn primary" href={sessionCompleteHref}>Finish session</Link> : <Link className="btn primary" href={nextLeadHref || `/dashboard/leads/${sessionNextLeadId}?session=${sessionId}#outreach`}>Next prospect</Link>}
         </div>
       ) : null}
 

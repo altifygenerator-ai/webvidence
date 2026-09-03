@@ -9,10 +9,13 @@ import { PLANS } from '@/lib/plans';
 import { getOnboardingStage } from '@/lib/onboarding';
 import { getActiveSession } from '@/lib/retention/session';
 import { getLocalDayBounds, normalizeTimezoneOffset, TIMEZONE_OFFSET_COOKIE } from '@/lib/leads/timezone';
-import { distanceMiles } from '@/lib/providers/google-places';
+import { getProspectingArea, leadInsideProspectingArea, shortProspectingAreaLabel } from '@/lib/retention/prospecting-area';
+import { marketResultsHref } from '@/lib/navigation/prospect-flow';
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ campaign?: string }> }) {
   const user = await requireViewer();
+  const { campaign: requestedCampaignId } = await searchParams;
+  const returnMarketHref = requestedCampaignId && isUuid(requestedCampaignId) ? marketResultsHref(requestedCampaignId) : null;
   const db = createAdminClient();
   const now = new Date();
   const cookieStore = await cookies();
@@ -36,9 +39,11 @@ export default async function Dashboard() {
     db.from('prospecting_sessions').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('workspace_id', user.workspaceId).eq('status', 'completed').gte('completed_at', startToday.toISOString()),
     db.from('prospecting_sessions').select('id,completed_at').eq('user_id', user.id).eq('workspace_id', user.workspaceId).eq('status', 'completed').gte('completed_at', startWeek.toISOString()).order('completed_at', { ascending: false }).limit(100),
     db.from('watched_markets').select('id,campaign_id,last_refreshed_at,last_new_prospect_count,campaigns(category,location,status)').eq('user_id', user.id).eq('workspace_id', user.workspaceId).eq('status', 'active').order('updated_at', { ascending: false }).limit(6),
-    db.from('prospecting_session_items').select('lead_id').eq('user_id', user.id).eq('workspace_id', user.workspaceId).limit(5000),
+    db.from('prospecting_session_items').select('lead_id').eq('user_id', user.id).eq('workspace_id', user.workspaceId).in('status', ['contacted','passed']).limit(5000),
     getActiveSession(user.id, user.workspaceId || ''),
   ]);
+
+  let currentActiveSession = activeSession;
 
   const leads = leadResult.data || [];
   const messages = messageResult.data || [];
@@ -52,31 +57,38 @@ export default async function Dashboard() {
     repeatEstablished: Boolean(routine),
   });
 
-  const prospectingArea = routine?.prospecting_area_location
-    && typeof routine.prospecting_area_center_lat === 'number'
-    && typeof routine.prospecting_area_center_lng === 'number'
-      ? {
-          location: routine.prospecting_area_location,
-          latitude: routine.prospecting_area_center_lat,
-          longitude: routine.prospecting_area_center_lng,
-          radiusMiles: Number(routine.prospecting_area_radius_miles || 25),
-        }
-      : null;
+  const prospectingArea = getProspectingArea(routine);
+
+  // Clean up untouched automatic sessions prepared under an older geography.
+  // Search/manual sessions and anything already in progress are never discarded.
+  if (currentActiveSession?.status === 'ready' && ['today', 'watched_market', 'reminder'].includes(currentActiveSession.source)) {
+    const shouldAbandon = !prospectingArea
+      ? true
+      : currentActiveSession.items.some((item) => {
+          const lead = relationOne<{ latitude?: number | null; longitude?: number | null }>(item.leads);
+          return !lead || !leadInsideProspectingArea(lead, prospectingArea);
+        });
+    if (shouldAbandon) {
+      const abandonedAt = new Date().toISOString();
+      await db.from('prospecting_sessions').update({ status: 'abandoned', completed_at: abandonedAt, updated_at: abandonedAt })
+        .eq('id', currentActiveSession.id)
+        .eq('user_id', user.id)
+        .eq('workspace_id', user.workspaceId)
+        .eq('status', 'ready');
+      currentActiveSession = null;
+    }
+  }
 
   const usedSessionLeadIds = new Set((usedSessionItemsResult.data || []).map((item) => item.lead_id));
-  const actionable = leads.filter((lead) => {
+  const actionable = prospectingArea ? leads.filter((lead) => {
     if (!['new','reviewing','ready_to_contact'].includes(lead.status || '')) return false;
     if (lead.passed_at || lead.first_contacted_at || usedSessionLeadIds.has(lead.id)) return false;
     if (prospectingArea) {
       if (typeof lead.latitude !== 'number' || typeof lead.longitude !== 'number') return false;
-      const miles = distanceMiles(
-        { latitude: prospectingArea.latitude, longitude: prospectingArea.longitude },
-        { latitude: lead.latitude, longitude: lead.longitude },
-      );
-      if (miles > prospectingArea.radiusMiles + 0.25) return false;
+      if (!leadInsideProspectingArea(lead, prospectingArea)) return false;
     }
     return true;
-  }).length;
+  }).length : 0;
 
   const stats = {
     reviewed: leads.filter((lead) => lead.last_reviewed_at && Date.parse(lead.last_reviewed_at) >= startWeek.getTime()).length,
@@ -98,7 +110,7 @@ export default async function Dashboard() {
     <div className="topline today-topline"><div><div className="eyebrow">Your prospecting desk</div><h1>Today</h1></div></div>
     <TodaySession
       stage={onboardingStage}
-      activeSession={activeSession}
+      activeSession={currentActiveSession}
       completedToday={Number(completedTodayResult.count || 0) > 0}
       queueCount={actionable}
       routine={routine ? {
@@ -110,17 +122,19 @@ export default async function Dashboard() {
         areaRadiusMiles: Number(routine.prospecting_area_radius_miles || 25),
       } : null}
       stats={stats}
+      returnMarketHref={returnMarketHref}
     />
 
     <section className="dashboard-watched-card" aria-label="Watched markets">
       <div className="dashboard-watched-head">
-        <div><span className="eyebrow">Watched markets</span><h3>{watchedMarkets.length ? `${watchedMarkets.length} market${watchedMarkets.length === 1 ? '' : 's'} feeding Today` : 'Keep one market working between sessions'}</h3></div>
+        <div><span className="eyebrow">Watched markets</span><h3>{watchedMarkets.length ? `${watchedMarkets.length} watched market${watchedMarkets.length === 1 ? '' : 's'}` : 'Keep one market working between sessions'}</h3></div>
         <Link className="btn" href="/dashboard/campaigns">{watchedMarkets.length ? 'Manage markets' : 'Choose a market'}</Link>
       </div>
       {watchedMarkets.length ? <div className="dashboard-watched-list">{watchedMarkets.map((watch) => {
         const campaign = Array.isArray(watch.campaigns) ? watch.campaigns[0] : watch.campaigns;
-        return <div key={watch.id}><b>{campaign?.category || 'Saved market'}</b><span>{prospectingArea ? `Automatic area: ${shortAreaLabel(prospectingArea.location)} · ${prospectingArea.radiusMiles} mi` : (campaign?.location || 'Location saved')} · {Number(watch.last_new_prospect_count || 0)} new on last refresh</span></div>;
+        return <div key={watch.id}><b>{campaign?.category || 'Saved market'}</b><span>{campaign?.location || 'Location saved'} · {Number(watch.last_new_prospect_count || 0)} new on last refresh</span></div>;
       })}</div> : <p>Free includes one watched market. New, previously unseen businesses can be surfaced into the next prepared session.</p>}
+      {watchedMarkets.length && prospectingArea ? <p className="dashboard-watched-area-note">Watched markets refresh in their saved locations. Today only pulls businesses inside {shortProspectingAreaLabel(prospectingArea.location)} · {prospectingArea.radiusMiles} mi.</p> : null}
     </section>
 
     <div className="dashboard-quiet-links" aria-label="Secondary workspace actions">
@@ -147,6 +161,10 @@ function getLocalWeekStart(now: Date, timezoneOffsetMinutes: number) {
   return new Date(local.getTime() + timezoneOffsetMinutes * 60_000);
 }
 
-function shortAreaLabel(value: string) {
-  return value.split(',').slice(0, 2).join(',').trim() || value;
+function isUuid(value: string | undefined) {
+  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
+}
+
+function relationOne<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? (value[0] || null) : (value || null);
 }

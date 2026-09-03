@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { COUNTRIES } from '@/lib/countries';
 import { isCountryOnlyLocation, validateBusinessCategory } from '@/lib/search/validation';
+import { leadFromMarketHref, marketResultsHref } from '@/lib/navigation/prospect-flow';
 import {
   getPlainLeadReason,
   getTopContactRecommendations,
@@ -50,6 +51,7 @@ type Lead = {
   status?: string;
   passedAt?: string | null;
   passReason?: string | null;
+  firstContactedAt?: string | null;
   audit: Audit | null;
   auditStatus?: 'queued' | 'running' | 'completed' | 'failed' | 'limit_reached';
   auditJobId?: string | null;
@@ -64,6 +66,8 @@ type Campaign = {
   location: string;
   radius_miles: number;
   status: 'draft' | 'active' | 'paused' | 'completed' | 'archived';
+  total_count?: number;
+  unworked_count?: number;
 };
 
 
@@ -110,6 +114,8 @@ export default function Campaigns() {
   const [watchLoading, setWatchLoading] = useState('');
   const [sessionLoading, setSessionLoading] = useState(false);
   const [resultCampaignId, setResultCampaignId] = useState('');
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [resultFilter, setResultFilter] = useState<'unworked' | 'all'>('unworked');
 
 
   function toggleCampaignManager() {
@@ -209,7 +215,7 @@ export default function Campaigns() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not prepare a session.'); setSessionLoading(false); }
   }
 
-  async function openCampaign(campaign: Campaign) {
+  const openCampaign = useCallback(async (campaign: Campaign, syncUrl = true) => {
     setOpeningCampaignId(campaign.id);
     setError('');
     setNotice('');
@@ -217,10 +223,24 @@ export default function Campaigns() {
       const response = await fetch(`/api/campaigns?campaignId=${encodeURIComponent(campaign.id)}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not reopen that market.');
-      setLeads(data.leads || []);
+      const loadedLeads = (data.leads || []) as Lead[];
+      const unworkedCount = loadedLeads.filter((lead) => !lead.passedAt && !lead.firstContactedAt && !isContactedLead(lead.status)).length;
+      setLeads(loadedLeads);
+      setCampaigns((current) => current.map((item) => item.id === campaign.id
+        ? { ...item, ...(data.campaign || campaign), total_count: loadedLeads.length, unworked_count: unworkedCount }
+        : item));
       setOpenedCampaign(data.campaign || campaign);
       setResultCampaignId(campaign.id);
+      setResultFilter('unworked');
+      setResultsOpen(true);
       setMode('live');
+      setCampaignManagerOpen(true);
+      window.sessionStorage.setItem('webvidence:active-campaigns-panel', 'open');
+      if (syncUrl) {
+        const nextHref = marketResultsHref(campaign.id);
+        const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (current !== nextHref) window.history.pushState({ campaignId: campaign.id }, '', nextHref);
+      }
       setNotice(`${data.count || 0} saved prospect${data.count === 1 ? '' : 's'} loaded from ${campaign.category} in ${campaign.location}. Reopening a saved market does not use a search credit.`);
       window.setTimeout(() => document.getElementById('campaign-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch (campaignError) {
@@ -228,7 +248,33 @@ export default function Campaigns() {
     } finally {
       setOpeningCampaignId('');
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!campaigns.length || openedCampaign || openingCampaignId) return;
+    const campaignId = new URLSearchParams(window.location.search).get('campaign');
+    if (!campaignId) return;
+    const campaign = campaigns.find((item) => item.id === campaignId);
+    if (campaign) void openCampaign(campaign, false);
+  }, [campaigns, openedCampaign, openingCampaignId, openCampaign]);
+
+  useEffect(() => {
+    function handlePopState() {
+      const campaignId = new URLSearchParams(window.location.search).get('campaign');
+      if (!campaignId) {
+        setOpenedCampaign(null);
+        setResultCampaignId('');
+        setLeads([]);
+        setMode('');
+        setResultsOpen(false);
+        return;
+      }
+      const campaign = campaigns.find((item) => item.id === campaignId);
+      if (campaign) void openCampaign(campaign, false);
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [campaigns, openedCampaign?.id, openCampaign]);
 
   async function updateCampaign(campaignId: string, status: 'active' | 'paused' | 'archived') {
     setCampaignLoading(campaignId);
@@ -241,10 +287,18 @@ export default function Campaigns() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not update market.');
-      setCampaigns((current) => current.map((campaign) => campaign.id === campaignId ? data.campaign : campaign));
+      setCampaigns((current) => current.map((campaign) => campaign.id === campaignId ? { ...campaign, ...data.campaign } : campaign));
       if (status === 'archived' && watchedCampaignIds.has(campaignId)) {
         await fetch('/api/watched-markets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ campaignId, action: 'unwatch' }) }).catch(() => undefined);
         setWatchedCampaignIds((current) => { const next = new Set(current); next.delete(campaignId); return next; });
+      }
+      if (status === 'archived' && openedCampaign?.id === campaignId) {
+        setOpenedCampaign(null);
+        setResultCampaignId('');
+        setLeads([]);
+        setMode('');
+        setResultsOpen(false);
+        window.history.replaceState({}, '', '/dashboard/campaigns');
       }
       setNotice(status === 'archived' ? 'Market archived. That saved-market slot is available again.' : `Market marked ${status}.`);
     } catch (campaignError) {
@@ -284,6 +338,8 @@ export default function Campaigns() {
     setLeads([]);
     setOpenedCampaign(null);
     setResultCampaignId('');
+    setResultsOpen(false);
+    setResultFilter('unworked');
     const stages = [
       'Searching several parts of the market…',
       'Collecting websites and business details…',
@@ -307,6 +363,7 @@ export default function Campaigns() {
       if (!response.ok) throw new Error(json.error || 'Search failed.');
       setLeads(json.leads || []);
       setResultCampaignId(json.campaignId || '');
+      if (json.campaignId) window.history.replaceState({ campaignId: json.campaignId }, '', marketResultsHref(json.campaignId));
       setMode(json.mode || '');
       setNotice(json.warning || json.auditWarning || `${json.count || 0} businesses found near ${json.center?.formattedAddress || 'that location'}.`);
       const campaignResponse = await fetch('/api/campaigns');
@@ -368,6 +425,8 @@ export default function Campaigns() {
   );
   const recommendationIds = new Set(recommendations.map((item) => item.lead.id));
   const pendingRecommendationChecks = leads.filter(isRecommendationPending).length;
+  const unworkedLeads = useMemo(() => leads.filter((lead) => !lead.passedAt && !lead.firstContactedAt && !isContactedLead(lead.status)), [leads]);
+  const visibleLeads = resultFilter === 'unworked' ? unworkedLeads : leads;
 
   return (
     <AppShell>
@@ -403,14 +462,15 @@ export default function Campaigns() {
             <div className="campaign-manager-content" id="active-campaigns-content">
               <div className="campaign-manager-list">
                 {activeCampaigns.map((campaign) => (
-                  <article key={campaign.id}>
-                    <div><b>{campaign.category}</b><span>{campaign.location} · {campaign.radius_miles} miles</span></div>
-                    <span className="tag">{campaign.status}</span>
+                  <article key={campaign.id} className={openedCampaign?.id === campaign.id ? 'campaign-opened' : ''}>
+                    <button className="campaign-market-open" type="button" onClick={() => void openCampaign(campaign)} disabled={openingCampaignId === campaign.id}>
+                      <span><b>{campaign.category}</b><small>{campaign.location} · {campaign.radius_miles} miles</small><em>{Number(campaign.unworked_count || 0)} still to work · {Number(campaign.total_count || 0)} saved</em></span>
+                      <span className="campaign-market-open-end"><span className="tag">{campaign.status}</span><i aria-hidden="true">{openingCampaignId === campaign.id ? '…' : '→'}</i></span>
+                    </button>
                     <div className="campaign-actions">
-                      <button className="btn" type="button" onClick={() => void openCampaign(campaign)} disabled={openingCampaignId === campaign.id}>{openingCampaignId === campaign.id ? 'Opening…' : 'Open market'}</button>
                       <button className="btn" type="button" onClick={() => void updateCampaign(campaign.id, campaign.status === 'paused' ? 'active' : 'paused')} disabled={campaignLoading === campaign.id}>{campaign.status === 'paused' ? 'Resume' : 'Pause'}</button>
                       <button className="btn" type="button" onClick={() => void toggleWatch(campaign.id)} disabled={watchLoading === campaign.id || (!watchedCampaignIds.has(campaign.id) && watchedFreeLimit === 1 && watchedCampaignIds.size >= 1)}>{watchLoading === campaign.id ? 'Saving…' : watchedCampaignIds.has(campaign.id) ? 'Watching ✓' : 'Watch market'}</button>
-                      <button className="btn" type="button" onClick={() => void updateCampaign(campaign.id, 'archived')} disabled={campaignLoading === campaign.id}>{campaignLoading === campaign.id ? 'Saving…' : 'Archive'}</button>
+                      <button className="btn quiet" type="button" onClick={() => void updateCampaign(campaign.id, 'archived')} disabled={campaignLoading === campaign.id}>{campaignLoading === campaign.id ? 'Saving…' : 'Archive'}</button>
                     </div>
                   </article>
                 ))}
@@ -528,6 +588,10 @@ export default function Campaigns() {
             <div>
               <div className="eyebrow">Prospects found</div>
               <h3>{leads.length} {openedCampaign ? 'saved businesses' : 'businesses found'}</h3>
+              <div className="market-result-filters" aria-label="Market prospect filter">
+                <button className={resultFilter === 'unworked' ? 'active' : ''} type="button" onClick={() => { setResultFilter('unworked'); setResultsOpen(true); }}>Still to work <b>{unworkedLeads.length}</b></button>
+                <button className={resultFilter === 'all' ? 'active' : ''} type="button" onClick={() => { setResultFilter('all'); setResultsOpen(true); }}>All saved <b>{leads.length}</b></button>
+              </div>
             </div>
             <small>{openedCampaign ? `Loaded from ${openedCampaign.category} in ${openedCampaign.location}. No search credit was used.` : 'Webvidence highlights businesses worth reviewing, but you still decide who is worth contacting.'}</small>
           </div>
@@ -551,6 +615,7 @@ export default function Campaigns() {
                       item={item}
                       index={index}
                       nextLeadIds={recommendations.slice(index + 1).map((candidate) => candidate.lead.id)}
+                      campaignId={resultCampaignId || openedCampaign?.id || ''}
                     />
                   ))}
                 </div>
@@ -559,6 +624,7 @@ export default function Campaigns() {
                     item={recommendations[0]}
                     index={0}
                     nextLeadIds={recommendations.slice(1).map((candidate) => candidate.lead.id)}
+                    campaignId={resultCampaignId || openedCampaign?.id || ''}
                   />
                   {recommendations.length > 1 ? (
                     <details>
@@ -570,6 +636,7 @@ export default function Campaigns() {
                             item={item}
                             index={index + 1}
                             nextLeadIds={recommendations.slice(index + 2).map((candidate) => candidate.lead.id)}
+                            campaignId={resultCampaignId || openedCampaign?.id || ''}
                           />
                         ))}
                       </div>
@@ -588,10 +655,10 @@ export default function Campaigns() {
             <small className="batch-helper">Contact the good fits, pass the bad fits, and stop when the three-prospect session is complete.</small>
           </section>
 
-          <details className="all-results-disclosure">
-            <summary><span><b>Browse all {leads.length} results</b><small>The prepared session is the fastest path. Open the full list only when you want to explore.</small></span><em>{recommendationIds.size} recommended</em></summary>
+          <details className="all-results-disclosure" open={resultsOpen} onToggle={(event) => setResultsOpen(event.currentTarget.open)}>
+            <summary><span><b>{resultFilter === 'unworked' ? `View ${unworkedLeads.length} prospects still to work` : `Browse all ${leads.length} saved prospects`}</b><small>{openedCampaign ? 'Pick up where you left off. Contacted and passed businesses stay saved under All.' : 'The prepared session is the fastest path. Open the full list when you want to explore.'}</small></span><em>{recommendationIds.size} recommended</em></summary>
             <div className="prospect-list">
-            {leads.map((lead, index) => {
+            {visibleLeads.map((lead, index) => {
               const passed = Boolean(lead.passedAt);
               const contacted = isContactedLead(lead.status);
               const manualReview = Boolean(lead.audit?.findings.some((finding) => ['automated_check_blocked', 'website_unreachable', 'unsafe_or_invalid_url'].includes(finding.code)));
@@ -662,7 +729,7 @@ export default function Campaigns() {
 
                   <div className="prospect-actions">
                     {lead.audit ? (
-                      <Link className={`btn outreach-link ${passed ? '' : 'primary'}`} href={buildLeadHref(lead.id, nextLeadIds)}>{passed ? 'Open passed lead' : contacted ? 'Open contacted lead' : manualReview ? 'Review manually' : 'Review and draft'}</Link>
+                      <Link className={`btn outreach-link ${passed ? '' : 'primary'}`} href={buildLeadHref(lead.id, nextLeadIds, resultCampaignId || openedCampaign?.id || '')}>{passed ? 'Open passed lead' : contacted ? 'Open contacted lead' : manualReview ? 'Review manually' : 'Review and draft'}</Link>
                     ) : (
                       <button className="btn primary" onClick={() => analyze(lead.id)} disabled={auditingId === lead.id || lead.auditStatus === 'queued' || lead.auditStatus === 'running'}>
                         {auditingId === lead.id || lead.auditStatus === 'queued' || lead.auditStatus === 'running'
@@ -674,7 +741,7 @@ export default function Campaigns() {
                     )}
                     {lead.website && <a className="btn" href={lead.website} target="_blank" rel="noreferrer">Open website</a>}
                     {lead.googleMapsUrl && <a className="btn" href={lead.googleMapsUrl} target="_blank" rel="noreferrer">Google listing</a>}
-                    {!lead.audit ? <Link className="btn outreach-link" href={buildLeadHref(lead.id, nextLeadIds)}>Open lead file</Link> : null}
+                    {!lead.audit ? <Link className="btn outreach-link" href={buildLeadHref(lead.id, nextLeadIds, resultCampaignId || openedCampaign?.id || '')}>Open lead file</Link> : null}
                   </div>
                 </div>
               </article>
@@ -692,10 +759,12 @@ function RecommendationRow({
   item,
   index,
   nextLeadIds,
+  campaignId,
 }: {
   item: ContactRecommendation<Lead>;
   index: number;
   nextLeadIds: string[];
+  campaignId: string;
 }) {
   return (
     <article className="recommendation-row">
@@ -705,7 +774,7 @@ function RecommendationRow({
         <p>{item.reason}</p>
         {item.signals.length ? <small>{item.signals.slice(0, 2).join(' · ')}</small> : null}
       </div>
-      <Link className="btn primary" href={buildLeadHref(item.lead.id, nextLeadIds)} onClick={() => void recordRecommendedOpen(item.lead.id)}>
+      <Link className="btn primary" href={buildLeadHref(item.lead.id, nextLeadIds, campaignId)} onClick={() => void recordRecommendedOpen(item.lead.id)}>
         Open details
       </Link>
     </article>
@@ -725,7 +794,8 @@ async function recordRecommendedOpen(leadId: string) {
   }
 }
 
-function buildLeadHref(leadId: string, nextLeadIds: string[]) {
+function buildLeadHref(leadId: string, nextLeadIds: string[], campaignId: string) {
+  if (campaignId) return leadFromMarketHref({ leadId, campaignId, queue: nextLeadIds });
   const params = new URLSearchParams({ source: 'search' });
   if (nextLeadIds.length) params.set('queue', nextLeadIds.join(','));
   return `/dashboard/leads/${leadId}?${params.toString()}#outreach`;

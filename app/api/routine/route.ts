@@ -6,6 +6,7 @@ import { assertTrustedMutation, RequestSecurityError } from '@/lib/security/requ
 import { enforceRateLimit, RATE_LIMITS, RateLimitError } from '@/lib/security/rate-limit';
 import { logApiUsage } from '@/lib/data/api-usage';
 import { geocodeLocation } from '@/lib/providers/google-places';
+import { getProspectingArea, leadInsideProspectingArea } from '@/lib/retention/prospecting-area';
 
 const optionalArea = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? null : value,
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
     const requestedArea = input.prospectingArea?.trim() || null;
 
     const { data: existing } = await db.from('prospecting_routines')
-      .select('prospecting_area_location,prospecting_area_center_lat,prospecting_area_center_lng,prospecting_area_radius_miles')
+      .select('prospecting_area_location,prospecting_area_center_lat,prospecting_area_center_lng,prospecting_area_radius_miles,unsubscribed_at')
       .eq('user_id', user.id)
       .eq('workspace_id', user.workspaceId)
       .maybeSingle();
@@ -124,6 +125,7 @@ export async function POST(req: Request) {
       session_size: input.sessionSize,
       reminder_email_enabled: input.reminderEmailEnabled,
       reminder_emails_enabled: input.reminderEmailEnabled,
+      unsubscribed_at: input.reminderEmailEnabled ? null : (existing?.unsubscribed_at || null),
       weekly_routine_enabled: input.weeklyRoutineEnabled,
       weekly_reminder_enabled: input.weeklyRoutineEnabled,
       prospecting_area_location: areaLocation,
@@ -137,6 +139,44 @@ export async function POST(req: Request) {
       .select(routineSelect)
       .single();
     if (error) throw new Error(error.message);
+
+    // If the user deliberately changes their automatic area, do not leave an
+    // untouched prepared session pointing at the old geography. In-progress
+    // sessions are preserved so changing Settings never discards real work.
+    if (input.prospectingArea !== undefined) {
+      const savedArea = getProspectingArea(data);
+      const { data: readySession } = await db.from('prospecting_sessions')
+        .select('id,source')
+        .eq('user_id', user.id)
+        .eq('workspace_id', user.workspaceId)
+        .eq('status', 'ready')
+        .in('source', ['today', 'watched_market', 'reminder'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (readySession) {
+        const { data: items } = await db.from('prospecting_session_items')
+          .select('leads(latitude,longitude)')
+          .eq('session_id', readySession.id)
+          .eq('workspace_id', user.workspaceId)
+          .in('status', ['ready', 'working']);
+        const outsideArea = savedArea
+          ? (items || []).some((item) => {
+              const lead = relationOne<{ latitude: number | null; longitude: number | null }>(item.leads);
+              return !lead || !leadInsideProspectingArea(lead, savedArea);
+            })
+          : true;
+        if (outsideArea) {
+          const now = new Date().toISOString();
+          await db.from('prospecting_sessions').update({ status: 'abandoned', completed_at: now, updated_at: now })
+            .eq('id', readySession.id)
+            .eq('workspace_id', user.workspaceId)
+            .eq('user_id', user.id)
+            .eq('status', 'ready');
+        }
+      }
+    }
 
     await logApiUsage({
       workspaceId: user.workspaceId,
@@ -158,4 +198,8 @@ export async function POST(req: Request) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Invalid routine settings.' }, { status: 400 });
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not save routine.' }, { status: 500 });
   }
+}
+
+function relationOne<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? (value[0] || null) : (value || null);
 }

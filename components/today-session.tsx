@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { OnboardingStage } from '@/lib/onboarding';
+import { sessionLeadHref } from '@/lib/navigation/prospect-flow';
 
 const STEPS = ['Find', 'Review', 'Draft', 'Send', 'Repeat'];
 const STEP_INDEX: Record<OnboardingStage, number> = { first_search: 0, review: 1, draft: 2, send: 3, repeat: 4, active: 5 };
@@ -23,22 +24,25 @@ type Stats = {
 
 export function TodaySession(props: {
   stage: OnboardingStage;
-  activeSession: { id: string; target_size: number; items: SessionItem[] } | null;
+  activeSession: { id: string; campaign_id?: string | null; target_size: number; items: SessionItem[] } | null;
   completedToday: boolean;
   queueCount: number;
   routine: Routine;
   stats: Stats;
+  returnMarketHref?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const activeItems = props.activeSession?.items || [];
-  const worked = activeItems.filter((item) => !['pending', 'working'].includes(item.status)).length;
-  const next = activeItems.find((item) => ['pending', 'working'].includes(item.status));
-  const nextHref = props.activeSession && next ? `/dashboard/leads/${next.lead_id}?session=${props.activeSession.id}#outreach` : null;
+  const worked = activeItems.filter((item) => !['ready', 'working'].includes(item.status)).length;
+  const next = activeItems.find((item) => ['ready', 'working'].includes(item.status));
+  const nextHref = props.activeSession && next ? sessionLeadHref({ leadId: next.lead_id, sessionId: props.activeSession.id, campaignId: props.activeSession.campaign_id }) : null;
   const sessionSize = props.routine?.sessionSize || 3;
   const actionsReady = Math.min(props.queueCount, sessionSize);
-  const showFind = props.stage === 'first_search' || props.queueCount === 0;
+  const hasArea = Boolean(props.routine?.areaLocation);
+  const needsArea = props.stage !== 'first_search' && !props.activeSession && !hasArea;
+  const showFind = props.stage === 'first_search' || (!needsArea && props.queueCount === 0);
 
   async function startSession() {
     setBusy(true);
@@ -66,7 +70,7 @@ export function TodaySession(props: {
         <div className="today-complete-copy">
           <span className="eyebrow">Today</span>
           <h2>You&apos;re done for today.</h2>
-          <p>You reached a clean stopping point. Webvidence will keep your pipeline and watched market ready for the next useful session.</p>
+          <p>You reached a clean stopping point. Your pipeline stays organized, and any watched markets can surface fresh prospects for a future session.</p>
         </div>
         <div className="today-completion-results" aria-label="This week's progress">
           <Metric value={props.stats.reviewed} label="reviewed" />
@@ -77,9 +81,10 @@ export function TodaySession(props: {
         <div className="today-complete-footer">
           <span>{routineSummary(props.routine)}{areaSummary(props.routine) ? <> · {areaSummary(props.routine)}</> : null}</span>
           <div className="today-complete-actions">
-            <button className="btn today-start-another" type="button" disabled={busy} onClick={() => void startSession()}>
-              {busy ? 'Checking your market…' : 'Start another session'}
-            </button>
+            {hasArea ? <button className="btn today-start-another" type="button" disabled={busy} onClick={() => void startSession()}>
+              {busy ? 'Checking your area…' : 'Start another session'}
+            </button> : <Link className="btn today-start-another" href="/dashboard/settings#routine">Set prospecting area</Link>}
+            {props.returnMarketHref ? <Link className="btn primary" href={props.returnMarketHref}>Back to market</Link> : null}
             {!props.routine ? <Link className="btn primary" href="/dashboard/settings#routine">Set next routine</Link> : null}
             <Link className="btn quiet" href="/dashboard/leads">View pipeline</Link>
             {props.queueCount === 0 ? <Link className="btn quiet" href="/dashboard/campaigns">Find more prospects</Link> : null}
@@ -92,9 +97,11 @@ export function TodaySession(props: {
 
   const heading = props.activeSession
     ? 'Your session is in progress'
-    : showFind
-      ? 'Find your next prospects'
-      : `${actionsReady} prospect${actionsReady === 1 ? '' : 's'} ready`;
+    : needsArea
+      ? 'Choose where Today should prospect'
+      : showFind
+        ? 'Find your next prospects'
+        : `${actionsReady} prospect${actionsReady === 1 ? '' : 's'} ready`;
 
   return (
     <section className="today-session-card" aria-label="Today prospecting session">
@@ -105,9 +112,11 @@ export function TodaySession(props: {
           <p className="today-session-subcopy">
             {props.activeSession
               ? 'Pick up exactly where you left off. Contact or pass each prospect, then stop.'
-              : showFind
-                ? 'Choose one market. Webvidence will turn the strongest results into a small, finishable session.'
-                : `A focused batch is ready. About ${Math.max(4, actionsReady * 3)} minutes.`}
+              : needsArea
+                ? 'Set one city or postal code so automatic sessions stay in the region you actually work. Manual Find searches can still use any location.'
+                : showFind
+                  ? 'Choose one market. Webvidence will turn the strongest results into a small, finishable session.'
+                  : `A focused batch is ready inside your saved area. About ${Math.max(4, actionsReady * 3)} minutes.`}
           </p>
         </div>
         {props.activeSession ? <SessionDots total={props.activeSession.target_size} worked={worked} /> : null}
@@ -115,11 +124,12 @@ export function TodaySession(props: {
 
       <div className="today-session-action-row">
         {nextHref ? <Link className="btn primary today-primary-action" href={nextHref}>Continue session</Link>
+          : needsArea ? <Link className="btn primary today-primary-action" href="/dashboard/settings#routine">Set prospecting area</Link>
           : showFind ? <Link className="btn primary today-primary-action" href="/dashboard/campaigns">Find a market</Link>
           : <button className="btn primary today-primary-action" type="button" disabled={busy} onClick={() => void startSession()}>{busy ? 'Preparing…' : 'Start session'}</button>}
         <span className="today-routine-line">{routineSummary(props.routine)}</span>
       </div>
-      {areaSummary(props.routine) ? <div className="today-area-line"><span>Automatic area: {areaSummary(props.routine)}</span><Link href="/dashboard/settings#routine">Change</Link></div> : null}
+      {areaSummary(props.routine) ? <div className="today-area-line"><span>Automatic area: {areaSummary(props.routine)}</span><Link href="/dashboard/settings#routine">Change</Link></div> : props.stage !== 'first_search' ? <div className="today-area-line today-area-missing"><span>Automatic area: not set</span><Link href="/dashboard/settings#routine">Set area</Link></div> : null}
 
       {props.stage !== 'active' ? (
         <div className="today-onboarding-compact" aria-label="Onboarding progress">

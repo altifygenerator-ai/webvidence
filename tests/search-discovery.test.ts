@@ -73,7 +73,7 @@ describe('market discovery coverage', () => {
     expect(selected.map((item) => item.id)).toContain('small-site');
   });
 
-  it('skips businesses already saved in the campaign when enough new matches exist', () => {
+  it('skips businesses already saved in the workspace when enough new matches exist', () => {
     const candidates = [
       candidate('seen', { bestMatchRank: 0 }),
       candidate('new-1', { bestMatchRank: 1 }),

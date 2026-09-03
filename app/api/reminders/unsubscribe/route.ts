@@ -10,11 +10,17 @@ export async function GET(req: Request) {
     return new NextResponse('This unsubscribe link is invalid.', { status: 400 });
   }
   const db = createAdminClient();
+  const now = new Date().toISOString();
   const { error } = await db.from('prospecting_routines')
-    .update({ reminder_email_enabled: false, updated_at: new Date().toISOString() })
+    .update({
+      reminder_email_enabled: false,
+      reminder_emails_enabled: false,
+      unsubscribed_at: now,
+      updated_at: now,
+    })
     .eq('user_id', userId);
   if (error) return new NextResponse('Could not update reminder preferences.', { status: 500 });
-  return new NextResponse('Webvidence email reminders are now turned off. You can turn them back on from Outreach settings.', {
+  return new NextResponse('Webvidence email reminders are now turned off. You can turn them back on from Settings.', {
     headers: { 'content-type': 'text/plain; charset=utf-8' },
   });
 }

@@ -237,14 +237,17 @@ export async function POST(req: Request) {
     if (runError) throw new Error(`Search run could not be saved: ${runError.message}`);
 
     try {
-      const { data: priorCampaignLeads } = await db
+      // Keep saved markets stable. A business already saved anywhere in this
+      // workspace should not be silently moved into a newer overlapping
+      // search. The provider can still use seen businesses as a last-resort
+      // fallback, and saveBusinesses defensively refuses cross-market moves.
+      const { data: priorWorkspaceLeads } = await db
         .from('leads')
         .select('google_place_id')
         .eq('workspace_id', user.workspaceId)
-        .eq('campaign_id', campaign.id)
         .not('google_place_id', 'is', null)
-        .limit(1000);
-      const previousPlaceIds = (priorCampaignLeads || [])
+        .limit(5000);
+      const previousPlaceIds = (priorWorkspaceLeads || [])
         .map((lead) => lead.google_place_id)
         .filter((value): value is string => typeof value === 'string' && value.length > 0);
       const coverage = DISCOVERY_COVERAGE[user.isAdmin ? 'admin' : user.plan];
@@ -408,10 +411,16 @@ async function saveBusinesses(options: {
   for (const business of options.businesses) {
     const { data: existing } = await db
       .from('leads')
-      .select('id,opportunity_score,status,website,website_source,website_verification_status,website_updated_by_user_at')
+      .select('id,campaign_id,opportunity_score,status,website,website_source,website_verification_status,website_updated_by_user_at')
       .eq('workspace_id', options.workspaceId)
       .eq('google_place_id', business.id)
       .maybeSingle();
+
+    if (existing?.campaign_id && existing.campaign_id !== options.campaignId) {
+      // The lead belongs to an earlier saved market. Do not reassign it: that
+      // would make the business disappear when the user reopens that market.
+      continue;
+    }
 
     const keepUserWebsite = existing?.website_source === 'user' && Boolean(existing.website);
     const resolvedWebsite = keepUserWebsite ? existing.website : business.website;

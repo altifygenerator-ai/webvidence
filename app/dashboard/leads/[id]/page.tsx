@@ -13,6 +13,7 @@ import { requireViewer } from "@/lib/security/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveSession } from "@/lib/retention/session";
+import { leadFromMarketHref, marketResultsHref, sessionCompleteHref as buildSessionCompleteHref, sessionLeadHref } from "@/lib/navigation/prospect-flow";
 import { isManualReviewFinding, type LeadOutcome } from "@/lib/leads/priority";
 import { auditIsCurrentForWebsite, websiteStatusLabel } from "@/lib/leads/website";
 
@@ -21,11 +22,11 @@ export default async function LeadFile({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ queue?: string; source?: string; session?: string; from?: string }>;
+  searchParams: Promise<{ queue?: string; source?: string; session?: string; campaign?: string; from?: string }>;
 }) {
   const user = await requireViewer();
   const { id } = await params;
-  const { queue, source, session: requestedSessionId } = await searchParams;
+  const { queue, source, session: requestedSessionId, campaign: requestedCampaignId } = await searchParams;
   const queueIds = String(queue || "").split(",").filter(Boolean).slice(0, 10);
   const nextLeadId = queueIds[0] || null;
   const remainingQueue = queueIds.slice(1);
@@ -35,7 +36,7 @@ export default async function LeadFile({
   const { data: lead } = await supabase
     .from("leads")
     .select(
-      "id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
+      "id,campaign_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,google_maps_url,reviews,rating,status,opportunity_score,notes,business_observation,next_follow_up_at,last_contacted_at,first_contacted_at,lead_outcome,follow_up_step,follow_up_stopped_at,last_audited_at,manual_review_required,manual_review_reason",
     )
     .eq("id", id)
     .eq("workspace_id", user.workspaceId)
@@ -107,10 +108,10 @@ export default async function LeadFile({
   const sessionItems = activeSession?.items || [];
   const currentSessionItem = sessionItems.find((item) => item.lead_id === id) || null;
   const nextSessionItem = currentSessionItem
-    ? sessionItems.find((item) => item.position > currentSessionItem.position && ["pending", "working"].includes(item.status))
-      || sessionItems.find((item) => item.lead_id !== id && ["pending", "working"].includes(item.status))
+    ? sessionItems.find((item) => item.position > currentSessionItem.position && ["ready", "working"].includes(item.status))
+      || sessionItems.find((item) => item.lead_id !== id && ["ready", "working"].includes(item.status))
     : null;
-  const sessionWorkedCount = sessionItems.filter((item) => !["pending", "working"].includes(item.status)).length;
+  const sessionWorkedCount = sessionItems.filter((item) => !["ready", "working"].includes(item.status)).length;
   const contactPaths = contactResult.data || [];
   const publicEmail = contactPaths.find((path) => path.kind === "email" && path.value)?.value || "";
   const facebookUrl = contactPaths.find((path) => path.kind === "facebook" && path.url)?.url || null;
@@ -135,6 +136,9 @@ export default async function LeadFile({
     : "No saved Google review activity";
   const leadLocation = lead.address || [lead.city, lead.state].filter(Boolean).join(", ");
   const isSessionProspect = Boolean(activeSession && currentSessionItem);
+  const originCampaignId = activeSession?.campaign_id || (source === "search" ? (requestedCampaignId || lead.campaign_id || null) : null);
+  const marketReturnHref = originCampaignId ? marketResultsHref(originCampaignId) : null;
+  const sessionDoneHref = buildSessionCompleteHref(originCampaignId);
 
   const [{ data: messages }, { data: outreachProfile }] = await Promise.all([
     supabase
@@ -181,13 +185,14 @@ export default async function LeadFile({
           position={currentSessionItem.position}
           targetSize={activeSession.target_size}
           workedCount={sessionWorkedCount}
-          nextLeadHref={nextSessionItem ? `/dashboard/leads/${nextSessionItem.lead_id}?session=${activeSession.id}#outreach` : null}
+          nextLeadHref={nextSessionItem ? sessionLeadHref({ leadId: nextSessionItem.lead_id, sessionId: activeSession.id, campaignId: originCampaignId }) : null}
+          campaignId={originCampaignId}
         />
       ) : null}
 
       <header className={`lead-workspace-head ${isSessionProspect ? "session-lead-head" : ""}`}>
         <div>
-          <Link className="back-link" href={isSessionProspect ? "/dashboard" : "/dashboard/leads"}>{isSessionProspect ? "← Exit to Today" : "← Back to pipeline"}</Link>
+          <Link className="back-link" href={isSessionProspect ? (marketReturnHref || "/dashboard") : (marketReturnHref || "/dashboard/leads")}>{isSessionProspect ? (marketReturnHref ? "← Exit to market" : "← Exit to Today") : (marketReturnHref ? "← Back to market" : "← Back to pipeline")}</Link>
           <div className="eyebrow">{isSessionProspect ? "Current prospect" : "Prospect"}</div>
           <h1>{lead.name}</h1>
           <p>{[lead.category || "Local business", leadLocation].filter(Boolean).join(" · ")}</p>
@@ -217,8 +222,17 @@ export default async function LeadFile({
         sessionId={activeSession?.id || null}
         initialEmailRecipient={publicEmail}
         facebookContactUrl={facebookUrl}
-        nextLeadHref={nextSessionItem && activeSession ? `/dashboard/leads/${nextSessionItem.lead_id}?session=${activeSession.id}#outreach` : nextLead ? `/dashboard/leads/${nextLead.id}?source=${source || "search"}${remainingQueue.length ? `&queue=${remainingQueue.join(",")}` : ""}#outreach` : null}
+        nextLeadHref={nextSessionItem && activeSession
+          ? sessionLeadHref({ leadId: nextSessionItem.lead_id, sessionId: activeSession.id, campaignId: originCampaignId })
+          : nextLead && originCampaignId
+            ? leadFromMarketHref({ leadId: nextLead.id, campaignId: originCampaignId, queue: remainingQueue })
+            : nextLead
+              ? `/dashboard/leads/${nextLead.id}?source=${source || "search"}${remainingQueue.length ? `&queue=${remainingQueue.join(",")}` : ""}#outreach`
+              : null}
         nextLeadName={nextLead?.name || null}
+        returnHref={marketReturnHref}
+        returnLabel={marketReturnHref ? "Back to market" : null}
+        sessionCompleteHref={sessionDoneHref}
         initialStatus={lead.status || "new"}
         initialNotes={lead.notes || ""}
         initialBusinessObservation={lead.business_observation || ""}

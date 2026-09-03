@@ -52,7 +52,7 @@ describe('product-ready prospecting flow', () => {
     expect(find).toContain('recommendations.length === 1');
     expect(find).toContain('Start ${recommendations.length}-prospect session');
     expect(find).toContain('all-results-disclosure');
-    expect(find).toContain('Browse all {leads.length} results');
+    expect(find).toContain('Browse all ${leads.length} saved prospects');
   });
 
   it('keeps post-success routine setup compact', () => {

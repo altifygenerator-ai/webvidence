@@ -37,7 +37,36 @@ export async function GET(req: Request) {
       .order('updated_at', { ascending: false })
       .limit(100);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ campaigns: data || [] }, { headers: { 'cache-control': 'no-store' } });
+
+    const campaignIds = (data || []).map((campaign) => campaign.id);
+    const { data: leadRows, error: countLeadError } = campaignIds.length
+      ? await db.from('leads')
+        .select('campaign_id,status,passed_at,first_contacted_at')
+        .eq('workspace_id', user.workspaceId)
+        .in('campaign_id', campaignIds)
+        .neq('status', 'archived')
+        .limit(5000)
+      : { data: [], error: null };
+    if (countLeadError) return NextResponse.json({ error: countLeadError.message }, { status: 400 });
+
+    const counts = new Map<string, { total: number; unworked: number }>();
+    for (const lead of leadRows || []) {
+      if (!lead.campaign_id) continue;
+      const current = counts.get(lead.campaign_id) || { total: 0, unworked: 0 };
+      current.total += 1;
+      if (!lead.passed_at && !lead.first_contacted_at && ['new', 'reviewing', 'ready_to_contact'].includes(String(lead.status || 'new'))) {
+        current.unworked += 1;
+      }
+      counts.set(lead.campaign_id, current);
+    }
+
+    return NextResponse.json({
+      campaigns: (data || []).map((campaign) => ({
+        ...campaign,
+        total_count: counts.get(campaign.id)?.total || 0,
+        unworked_count: counts.get(campaign.id)?.unworked || 0,
+      })),
+    }, { headers: { 'cache-control': 'no-store' } });
   }
 
   const parsedCampaignId = campaignIdSchema.safeParse(requestedCampaignId);
@@ -54,7 +83,7 @@ export async function GET(req: Request) {
   if (!campaign) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
 
   const { data: leadRows, error: leadError } = await db.from('leads')
-    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,passed_at,pass_reason,updated_at')
+    .select('id,google_place_id,name,category,address,city,state,website,website_source,website_verification_status,website_updated_by_user_at,phone,reviews,rating,google_maps_url,raw_provider_data,opportunity_score,status,passed_at,pass_reason,first_contacted_at,updated_at')
     .eq('workspace_id', user.workspaceId)
     .eq('campaign_id', campaign.id)
     .neq('status', 'archived')
@@ -151,6 +180,7 @@ export async function GET(req: Request) {
       status: lead.status,
       passedAt: lead.passed_at,
       passReason: lead.pass_reason,
+      firstContactedAt: lead.first_contacted_at,
       auditStatus,
       auditJobId: job?.id || null,
       auditError: job?.error_message || null,

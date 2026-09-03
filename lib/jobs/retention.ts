@@ -2,9 +2,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { env } from '@/lib/env';
 import { searchBusinesses } from '@/lib/providers/google-places';
 import { queueLeadAudits } from '@/lib/jobs/audits';
-import { createUnsubscribeToken } from '@/lib/retention/unsubscribe';
+import { makeReminderUnsubscribeToken } from '@/lib/retention/reminder-token';
 import { logApiUsage } from '@/lib/data/api-usage';
 import type { PlanId } from '@/lib/plans';
+import { getProspectingArea, leadInsideProspectingArea } from '@/lib/retention/prospecting-area';
+import { marketResultsHref } from '@/lib/navigation/prospect-flow';
 
 type ReminderType = 'session_ready' | 'follow_up_due' | 'market_update' | 'weekly_ready' | 'inactivity_rescue';
 
@@ -67,10 +69,13 @@ export async function refreshDueMarkets() {
         .eq('workspace_id', watch.workspace_id)
         .maybeSingle();
 
-      const area = automaticArea(routine);
-      const centerLat = area?.latitude ?? campaign.center_lat;
-      const centerLng = area?.longitude ?? campaign.center_lng;
-      const radiusMiles = area?.radiusMiles ?? Number(campaign.radius_miles || 50);
+      const area = getProspectingArea(routine);
+      // A watched market must stay geographically faithful to the search the
+      // user chose to watch. The saved prospecting area filters what can feed
+      // Today; it does not rewrite a Hot Springs market into another city.
+      const centerLat = campaign.center_lat;
+      const centerLng = campaign.center_lng;
+      const radiusMiles = Number(campaign.radius_miles || 50);
 
       if (typeof centerLat !== 'number' || typeof centerLng !== 'number') {
         await rescheduleWatch(watch.id, Number(watch.refresh_interval_hours || 24), 0, now);
@@ -100,7 +105,7 @@ export async function refreshDueMarkets() {
       const candidates = result.businesses
         .filter((business) => business.businessStatus === 'OPERATIONAL' || business.reviews > 0)
         .slice(0, 5);
-      const inserted: Array<{ id: string; website: string | null; reviews: number; name: string }> = [];
+      const inserted: Array<{ id: string; website: string | null; reviews: number; name: string; latitude: number | null; longitude: number | null }> = [];
 
       for (const business of candidates) {
         const { data, error } = await db.from('leads').insert({
@@ -129,7 +134,7 @@ export async function refreshDueMarkets() {
             distanceMiles: business.distanceMiles,
             automaticProspectingArea: area?.location || null,
           },
-        }).select('id,website,reviews,name').single();
+        }).select('id,website,reviews,name,latitude,longitude').single();
         if (!error && data) inserted.push(data);
       }
 
@@ -143,20 +148,30 @@ export async function refreshDueMarkets() {
             isAdmin: profile.is_admin,
           }, inserted.slice(0, 3)).catch(() => undefined);
         }
-        await prepareSession(
-          watch.workspace_id,
-          watch.user_id,
-          campaign.id,
-          inserted.map((lead) => lead.id),
-          Number(routine?.session_size || 3),
-        );
+        // Watched markets may live anywhere the user explicitly chose. They only
+        // feed automatic Today sessions once an automatic prospecting area exists,
+        // and then only with businesses inside that area. Without an area, surface
+        // the businesses in the saved market but do not silently create a session.
+        const todayEligible = area
+          ? inserted.filter((lead) => leadInsideProspectingArea(lead, area)).map((lead) => lead.id)
+          : [];
+        if (todayEligible.length) {
+          await prepareSession(
+            watch.workspace_id,
+            watch.user_id,
+            campaign.id,
+            todayEligible,
+            Number(routine?.session_size || 3),
+          );
+        }
         surfaced += inserted.length;
         await productEvent(watch.workspace_id, watch.user_id, 'new_prospects_surfaced', {
           campaignId: campaign.id,
           watchId: watch.id,
           count: inserted.length,
-          prospectingArea: area?.location || campaign.location,
-          radiusMiles,
+          marketLocation: campaign.location,
+          marketRadiusMiles: radiusMiles,
+          automaticProspectingArea: area?.location || null,
         });
       }
 
@@ -165,8 +180,9 @@ export async function refreshDueMarkets() {
         campaignId: campaign.id,
         watchId: watch.id,
         count: inserted.length,
-        prospectingArea: area?.location || campaign.location,
-        radiusMiles,
+        marketLocation: campaign.location,
+        marketRadiusMiles: radiusMiles,
+        automaticProspectingArea: area?.location || null,
       });
     } catch (error) {
       console.error('Watched market refresh failed:', watch.id, error);
@@ -193,6 +209,7 @@ async function prepareSession(workspaceId: string, userId: string, campaignId: s
     user_id: userId,
     campaign_id: campaignId,
     status: 'ready',
+    source: 'watched_market',
     target_size: selected.length,
   }).select('id').single();
   if (sessionError || !session) return;
@@ -224,12 +241,12 @@ export async function sendUsefulReminders() {
   for (const routine of routines || []) {
     const [{ data: profile }, { data: session }, { data: followUp }, { data: watchedMarket }] = await Promise.all([
       db.from('profiles').select('email').eq('id', routine.user_id).maybeSingle(),
-      db.from('prospecting_sessions').select('id,status,created_at').eq('user_id', routine.user_id).eq('workspace_id', routine.workspace_id).in('status', ['ready','active']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      db.from('prospecting_sessions').select('id,status,created_at,campaign_id').eq('user_id', routine.user_id).eq('workspace_id', routine.workspace_id).in('status', ['ready','active']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       routine.follow_up_reminders_enabled
         ? db.from('leads').select('id,name,next_follow_up_at').eq('workspace_id', routine.workspace_id).lte('next_follow_up_at', new Date().toISOString()).not('next_follow_up_at', 'is', null).order('next_follow_up_at').limit(1).maybeSingle()
         : Promise.resolve({ data: null }),
       routine.market_reminders_enabled
-        ? db.from('watched_markets').select('id,last_new_prospect_count,last_refreshed_at,campaigns(category)').eq('user_id', routine.user_id).eq('workspace_id', routine.workspace_id).eq('status', 'active').gt('last_new_prospect_count', 0).order('last_refreshed_at', { ascending: false }).limit(1).maybeSingle()
+        ? db.from('watched_markets').select('id,campaign_id,last_new_prospect_count,last_refreshed_at,campaigns(category)').eq('user_id', routine.user_id).eq('workspace_id', routine.workspace_id).eq('status', 'active').gt('last_new_prospect_count', 0).order('last_refreshed_at', { ascending: false }).limit(1).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
 
@@ -240,15 +257,19 @@ export async function sendUsefulReminders() {
 
     if (followUp) {
       sent += await deliver(routine, profile.email, 'follow_up_due', `followup:${followUp.id}:${dateKey}`, `/dashboard/leads/${followUp.id}`, `Follow-up due with ${followUp.name}`, 'A follow-up is due. Open the exact lead record and decide the next step.');
-    } else if (watchedMarket && marketCampaign && session) {
+    } else if (watchedMarket && marketCampaign) {
+      const marketPreparedThisSession = Boolean(session && session.campaign_id === watchedMarket.campaign_id);
+      const path = marketPreparedThisSession && session ? sessionPath : marketResultsHref(watchedMarket.campaign_id);
       sent += await deliver(
         routine,
         profile.email,
         'market_update',
         `market:${watchedMarket.id}:${watchedMarket.last_refreshed_at}`,
-        sessionPath,
+        path,
         `${watchedMarket.last_new_prospect_count} new prospect${watchedMarket.last_new_prospect_count === 1 ? '' : 's'} found`,
-        `Your watched ${marketCampaign.category} market found new businesses and prepared the next session.`,
+        marketPreparedThisSession
+          ? `Your watched ${marketCampaign.category} market found new businesses and prepared the next session.`
+          : `Your watched ${marketCampaign.category} market found new businesses. Open that market to review them.`,
       );
     } else if (session) {
       const inactive = (Date.now() - Date.parse(session.created_at)) / 86400_000 >= 3 && routine.inactivity_reminders_enabled;
@@ -314,8 +335,14 @@ async function deliver(routine: { user_id: string; workspace_id: string }, email
   }).select('id').maybeSingle();
   if (!claim) return 0;
 
+  const unsubscribeSignature = makeReminderUnsubscribeToken(routine.user_id);
+  if (!unsubscribeSignature) {
+    await db.from('reminder_deliveries').update({ status: 'failed', error_message: 'Reminder unsubscribe signing is not configured.' }).eq('id', claim.id);
+    return 0;
+  }
+
   const appUrl = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
-  const unsubscribe = `${appUrl}/api/reminders/unsubscribe?token=${encodeURIComponent(createUnsubscribeToken(routine.user_id))}`;
+  const unsubscribe = `${appUrl}/api/reminders/unsubscribe?u=${encodeURIComponent(routine.user_id)}&sig=${encodeURIComponent(unsubscribeSignature)}`;
   const taskUrl = `${appUrl}${path}${path.includes('?') ? '&' : '?'}from=reminder`;
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -324,7 +351,7 @@ async function deliver(routine: { user_id: string; workspace_id: string }, email
       from: env.REMINDER_FROM_EMAIL,
       to: [email],
       subject,
-      text: `${text}\n\nOpen the task: ${taskUrl}\n\nReminder preferences: ${appUrl}/dashboard/settings#reminders\nTurn off reminder emails: ${unsubscribe}`,
+      text: `${text}\n\nOpen the task: ${taskUrl}\n\nReminder preferences: ${appUrl}/dashboard/settings#routine\nTurn off reminder emails: ${unsubscribe}`,
       headers: { 'List-Unsubscribe': `<${unsubscribe}>` },
     }),
   });
@@ -361,15 +388,6 @@ function routineWindow(routine: { weekdays: number[]; preferred_time: string; ti
   } catch {
     return { ready: false, weekday: -1 };
   }
-}
-
-function automaticArea(routine: ProspectingRoutineArea | null) {
-  const location = routine?.prospecting_area_location || '';
-  const latitude = Number(routine?.prospecting_area_center_lat);
-  const longitude = Number(routine?.prospecting_area_center_lng);
-  const radiusMiles = Number(routine?.prospecting_area_radius_miles || 25);
-  if (!location || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(radiusMiles)) return null;
-  return { location, latitude, longitude, radiusMiles };
 }
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {

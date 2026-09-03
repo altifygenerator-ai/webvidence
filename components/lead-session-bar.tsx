@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { sessionCompleteHref, sessionLeadHref } from '@/lib/navigation/prospect-flow';
 
 const REASONS = [
   ['strong_existing_site', 'Strong site'],
   ['wrong_business_type', 'Wrong business'],
   ['no_contact_path', 'No contact path'],
-  ['business_inactive', 'Looks inactive'],
+  ['inactive_business', 'Looks inactive'],
   ['not_enough_opportunity', 'Not enough opportunity'],
   ['other', 'Other'],
 ] as const;
@@ -19,6 +20,7 @@ export function LeadSessionBar(props: {
   targetSize: number;
   workedCount: number;
   nextLeadHref: string | null;
+  campaignId?: string | null;
 }) {
   const router = useRouter();
   const [passing, setPassing] = useState(false);
@@ -44,8 +46,8 @@ export function LeadSessionBar(props: {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not pass this prospect.');
-      if (data.completed) router.push('/dashboard?session=complete');
-      else if (data.nextLeadId) router.push(`/dashboard/leads/${data.nextLeadId}?session=${props.sessionId}#outreach`);
+      if (data.completed) router.push(sessionCompleteHref(props.campaignId));
+      else if (data.nextLeadId) router.push(sessionLeadHref({ leadId: data.nextLeadId, sessionId: props.sessionId, campaignId: props.campaignId }));
       else if (props.nextLeadHref) router.push(props.nextLeadHref);
       else router.push('/dashboard');
       router.refresh();

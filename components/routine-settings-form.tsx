@@ -104,13 +104,13 @@ export function RoutineSettingsForm({ initialRoutine, onSaved, compact = false }
       <div className="prospecting-area-copy">
         <span className="eyebrow">Automatic prospecting area</span>
         <h4 id="prospecting-area-title">Keep prepared sessions close to the market you actually work</h4>
-        <p>Set a city or postal code once. Today sessions and watched-market refreshes will only use businesses inside this radius. Leave it blank to keep the current anywhere-in-your-workspace behavior.</p>
+        <p>Set a city or postal code once. Automatic Today sessions stay inside this radius. Manual Find searches can still use any location. If you leave this blank, Webvidence will not build automatic Today sessions from unrelated saved searches.</p>
       </div>
       <div className="prospecting-area-fields">
         <label><span>Market area</span><input className="input" value={area} onChange={(event) => setArea(event.target.value)} placeholder="Hot Springs, Arkansas" autoComplete="address-level2" /></label>
         <label><span>Radius</span><select className="input" value={areaRadius} onChange={(event) => setAreaRadius(Number(event.target.value))}>{AREA_RADII.map((value) => <option key={value} value={value}>{value} miles</option>)}</select></label>
       </div>
-      <small>Webvidence geocodes this location when you save it. It does not guess addresses or change locations you explicitly search for on the Find screen.</small>
+      <small>Webvidence geocodes this location when you save it. It does not guess your market from old searches, and it never changes locations you explicitly search for on the Find screen.</small>
     </section>
 
     <div className="routine-presets" aria-label="Routine presets">
