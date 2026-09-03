@@ -22,6 +22,12 @@ export const PASS_REASON_LABELS: Record<PassReason, string> = {
 };
 export type SessionItemOutcome = 'contacted' | 'passed' | 'follow_up_cleared' | 'reply_recorded';
 
+export function getSessionSummary(items: Array<{ status: string }>) {
+  const contacted = items.filter((item) => item.status === 'contacted').length;
+  const passed = items.filter((item) => item.status === 'passed').length;
+  return { reviewed: contacted + passed, contacted, passed };
+}
+
 export type ActionableLeadRankInput = {
   opportunityScore?: number | null;
   opportunity_score?: number | null;

@@ -533,6 +533,52 @@ async function fetchPageSnapshot(initialUrl: URL): Promise<PageSnapshot> {
   };
 }
 
+export type ExtractedPublicContactPath = {
+  kind: 'email' | 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'youtube' | 'phone' | 'contact_form' | 'quote_form' | 'booking_form';
+  value: string;
+  sourceUrl: string;
+};
+
+export function extractPublicContactPaths(html: string, baseUrl: URL): ExtractedPublicContactPath[] {
+  const sourceUrl = baseUrl.toString();
+  const found = new Map<string, ExtractedPublicContactPath>();
+  const add = (path: ExtractedPublicContactPath) => {
+    const key = `${path.kind}:${path.value}`;
+    if (!found.has(key)) found.set(key, path);
+  };
+
+  for (const match of html.matchAll(/href\s*=\s*["']mailto:([^"'?#\s]+)(?:\?[^"']*)?["']/gi)) {
+    const email = match[1].trim().toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) add({ kind: 'email', value: email, sourceUrl });
+  }
+
+  for (const match of html.matchAll(/href\s*=\s*["']tel:([^"']+)["']/gi)) {
+    const value = match[1].trim();
+    if (value.replace(/\D/g, '').length >= 7) add({ kind: 'phone', value, sourceUrl });
+  }
+
+  for (const match of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
+    try {
+      const url = new URL(match[1], baseUrl);
+      const host = url.hostname.toLowerCase().replace(/^www\./, '');
+      const path = url.pathname.toLowerCase();
+      if (host === 'facebook.com' || host.endsWith('.facebook.com')) add({ kind: 'facebook', value: url.toString(), sourceUrl });
+      else if (host === 'instagram.com' || host.endsWith('.instagram.com')) add({ kind: 'instagram', value: url.toString(), sourceUrl });
+      else if (host === 'linkedin.com' || host.endsWith('.linkedin.com')) add({ kind: 'linkedin', value: url.toString(), sourceUrl });
+      else if (host === 'tiktok.com' || host.endsWith('.tiktok.com')) add({ kind: 'tiktok', value: url.toString(), sourceUrl });
+      else if (host === 'youtube.com' || host === 'youtu.be' || host.endsWith('.youtube.com')) add({ kind: 'youtube', value: url.toString(), sourceUrl });
+      else if (url.origin === baseUrl.origin && /(contact|quote|estimate|book|appointment|schedule|request)/.test(path)) {
+        const kind = /(quote|estimate)/.test(path) ? 'quote_form' : /(book|appointment|schedule)/.test(path) ? 'booking_form' : 'contact_form';
+        add({ kind, value: url.toString(), sourceUrl });
+      }
+    } catch {
+      // Ignore malformed public links.
+    }
+  }
+
+  return Array.from(found.values()).slice(0, 30);
+}
+
 export function discoverPublicContactPaths(pages: Array<Pick<PageSnapshot, 'html' | 'finalUrl' | 'accessBlocked'>>): PublicContactPath[] {
   const found = new Map<string, PublicContactPath>();
 

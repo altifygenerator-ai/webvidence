@@ -645,26 +645,6 @@ export function OutreachComposer({
           </div>
         ) : null}
 
-        {leadStage === "draft" && latestDraft ? (
-          <>
-            <div className="next-step-meta">
-              <span>{formatIntent(latestDraft.intent)}</span>
-              <span>{formatChannel(getDeliveryChannel(latestDraft))}</span>
-            </div>
-            <div className="next-step-actions">
-              <button className="btn primary" type="button" onClick={() => void copySpecificMessage(latestDraft)}>Copy message</button>
-              {getDeliveryChannel(latestDraft) === "email" ? (
-                emailRecipient.trim() ? <a className="btn" href={buildMailtoHref(emailRecipient.trim(), latestDraft.subject || "", latestDraft.body)} onClick={() => { setSelectedId(latestDraft.id); beginExternalDelivery(latestDraft); }}>Open email</a> : <button className="btn" type="button" disabled>Confirm email first</button>
-              ) : null}
-              {getDeliveryChannel(latestDraft) === "facebook" && facebookContactUrl ? <a className="btn" href={facebookContactUrl} target="_blank" rel="noreferrer" onClick={() => { setSelectedId(latestDraft.id); beginExternalDelivery(latestDraft); }}>Open Facebook page</a> : null}
-              {getDeliveryChannel(latestDraft) === "text" ? (
-                <button className="btn" type="button" onClick={() => openTextApp(latestDraft)}>Open text</button>
-              ) : null}
-              <button className="btn quiet" type="button" onClick={() => { setSelectedId(latestDraft.id); setComposerOpen(true); }}>Edit draft</button>
-            </div>
-          </>
-        ) : null}
-
         {leadStage === "waiting" ? (
           <>
             <div className="next-step-meta">

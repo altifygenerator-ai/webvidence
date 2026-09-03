@@ -12,7 +12,7 @@ const nav = [
   ['Settings', '/dashboard/settings', '04'],
 ] as const;
 
-export function AppShell({ children, admin = false }: { children: React.ReactNode; admin?: boolean }) {
+export function AppShell({ children, admin = false, focused = false }: { children: React.ReactNode; admin?: boolean; focused?: boolean }) {
   const router = useRouter();
   const [pipelineActionCount, setPipelineActionCount] = useState(0);
 
@@ -36,7 +36,7 @@ export function AppShell({ children, admin = false }: { children: React.ReactNod
   );
 
   return (
-    <div className="app-frame">
+    <div className={focused ? "app-frame app-frame-focused" : "app-frame"}>
       <aside className="app-sidebar">
         <div>
           <Link className="wordmark app-wordmark" href="/dashboard"><span>WEB</span><i>V</i><span>IDENCE</span></Link>
