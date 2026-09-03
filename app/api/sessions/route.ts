@@ -25,6 +25,7 @@ export async function POST(req: Request) {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
     if (existing) return NextResponse.json({ session: existing });
 
     const [{ data: routine }, { data: priorSessions }, { data: candidates, error: leadError }] = await Promise.all([
@@ -38,11 +39,14 @@ export async function POST(req: Request) {
         .order('created_at', { ascending: false })
         .limit(200),
     ]);
+
     if (leadError) return NextResponse.json({ error: 'Prospects could not be loaded.' }, { status: 400 });
+
     const priorSessionIds = (priorSessions || []).map((session) => session.id);
     const { data: usedItems } = priorSessionIds.length
       ? await db.from('prospecting_session_items').select('lead_id').in('session_id', priorSessionIds).limit(5000)
       : { data: [] };
+
     const used = new Set((usedItems || []).map((item) => item.lead_id));
     const size = Math.max(1, Math.min(Number(routine?.session_size || 3), 10));
     const selected = (candidates || [])
@@ -61,6 +65,7 @@ export async function POST(req: Request) {
       status: 'ready',
       target_size: selected.length,
     }).select('id,status').single();
+
     if (sessionError) {
       const { data: raced } = await db.from('prospecting_sessions').select('id,status')
         .eq('user_id', user.id).in('status', ['ready', 'active']).limit(1).maybeSingle();
@@ -69,8 +74,16 @@ export async function POST(req: Request) {
     }
 
     const { error: itemError } = await db.from('prospecting_session_items').insert(
-      selected.map((lead, index) => ({ session_id: session.id, lead_id: lead.id, position: index + 1 })),
+      selected.map((lead, index) => ({
+        session_id: session.id,
+        workspace_id: user.workspaceId,
+        user_id: user.id,
+        lead_id: lead.id,
+        position: index + 1,
+        status: 'ready',
+      })),
     );
+
     if (itemError) {
       await db.from('prospecting_sessions').delete().eq('id', session.id);
       throw itemError;
